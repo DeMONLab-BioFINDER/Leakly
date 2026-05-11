@@ -1,2 +1,2 @@
-# Leakly: Leakage check in machine-learning pipelines
+# Leakly: Leakage check for machine-learning pipelines
 ---
