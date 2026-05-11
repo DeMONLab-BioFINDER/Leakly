@@ -1,6 +1,6 @@
 # VS code -related 
 .vscode/
-vscode-upload.json
+.vscode-upload.json
 
 # MACOS 
 .DS_Store
