@@ -1,2 +1,2 @@
-# DAMLeak: Leakage check for DAA+ML pipelines
+# Leakly: Leakage check in machine-learning pipelines
 ---
