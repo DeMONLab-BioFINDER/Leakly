@@ -1,15 +1,14 @@
 I am building a Python package `Leakly`.
 
+Ignore git history, just focus on the structure and planning of the package.
+
 Please help me build the structure of the package, modules, classes, and functions.
+
+They are under `./leakly/` directory.
 
 For empty scripts, you could write empty modules, classes, and functions with
 Input/Output, Docstring, but leave the implementation empty for now.
 The focus is on the structure and planning of the package.
-
-For non-empty scripts, check its implementation and designs, implements a copy of
-`<original_name>_codex.py` for your better implementation and designs. BUT,
-write empty modules, classes, and functions with Input/Output, Docstring,
-but leave the implementation empty for now.
 
 Avoid using any external libraries that are not commonly used,
 unless absolutely necessary for the functionality of the package.
@@ -125,7 +124,7 @@ plotter = SummaryPlotter(test_aucs)
 
 - Data normlaization, imputation, train/test split
 - Should be flexible to support different pipelines, but also have some default settings.
-- If possible, not create a data class for simplicity, just use numpy arrays for X, y, covariates.
+- DO NOT create a data class for simplicity, just use numpy arrays for X, y, covariates.
 
 ## `stats.py`
 
@@ -137,7 +136,7 @@ plotter = SummaryPlotter(test_aucs)
 - feature selection methods, such as linear regression DAA
 - should be flexible to support different pipelines, but also have some default settings.
 - The overall design should be feature_selection_method(X, y, covariates, config) -> selected_features
-- If possible, not use a data class for simplicity, just use numpy arrays for X, y, covariates.
+- DO NOT use a data class for simplicity, just use numpy arrays for X, y, covariates.
 - Please refer to my implementation in `leakly/daa.py` for details.
 
 ## `models.py`
@@ -145,7 +144,7 @@ plotter = SummaryPlotter(test_aucs)
 - machine learning models, such as random forest, SVM, etc.
 - user could define their own machine learning model
 - Default is random forest from sklearn
-- If possible, not create a data class for simplicity, just use numpy arrays for X, y, covariates.
+- DO NOT create a data class for simplicity, just use numpy arrays for X, y, covariates.
 
 ## `ml_pipeline.py`
 

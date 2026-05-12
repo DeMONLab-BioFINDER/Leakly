@@ -1,20 +1,31 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 '''
-Configuration models and YAML template helpers for DAMLeak.
+Configuration models and YAML helpers for Leakly.
 
-Written by Lijun An and DeMON Lab under MIT license:
-https://github.com/DeMONLab-BioFINDER/DeMONLabLicenses/blob/main/LICENSE
+The dataclasses define the configuration surface for the package and can be
+loaded from or saved to YAML files.
 '''
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
+
+import yaml
+
 
 CovariateType = Literal["continuous", "categorical"]
 CorrectionMethod = Literal["bonferroni", "fdr_bh"]
-SimilarityMetric = Literal["jaccard", "overlap"]
+EvaluationMetric = Literal["auc", "accuracy", "r2", "mse"]
+FeatureSelectionMethod = Literal["LinearRegressionDAA"]
+ImputationMethod = Literal["knn", "mean", "median", "most_frequent", "none"]
+MLModelName = Literal["random_forest", "svm", "custom"]
+NormalizationMethod = Literal["zscore", "minmax", "none"]
+ProblemType = Literal["binary_classification", "regression"]
+SplitMethod = Literal["train_test", "predefined"]
 
-#### Example Configuration YAML ####
+
 EXAMPLE_CONFIG_YAML = """
 input:
     data_path: data/input.csv
@@ -23,254 +34,427 @@ input:
     split_col: split
     train_label: train
     test_label: test
-    selected_feature_cols_path: data/selected_features.txt
     sample_id_col: sample_id
-    covariate_cols_path: data/covariate_columns.txt
+    covariate_cols_path: data/covariates.txt
+preproc:
+    encode_categorical_covariates: true
+imputation:
+    method: knn
+normalization:
+    method: zscore
+feature_selection:
+    method: LinearRegressionDAA
+    alpha: 0.05
+    minimum_effect_size: 0.0
+    top_ranks: 10
+    correction_method: fdr_bh
+split:
+    method: train_test
+    test_fraction: 0.2
+ml:
+    model: random_forest
+    metric: auc
+checker:
+    perc_permutation: 1.0
+    n_permutations: 100
 """
 
 
-
-#### Input Configuration ####
 @dataclass(slots=True, kw_only=True)
 class InputConfig:
     """
-    Configuration for input data. 
+    Paths and column names used to load an input dataset.
 
     Attributes
     ----------
-    data_path : str
-        Path to the input dataset (CSV or TSV).
-    feature_cols_path: str
-        Path to the file containing feature names (one per line).
-    target_col: str
-        Name of the column containing target labels..
-    split_col: str | None
-        Name of the column containing split labels (e.g., "train", "test").
-    train_label: str
-        Label used to identify training samples in the split column.
-    test_label: str
-        Label used to identify testing samples in the split column.
-    selected_feature_cols_path: str
-        Path to the file containing selected feature names (one per line).
-    sample_id_col [optional]: str | None
-        Name of the column containing sample IDs.
-    covariate_cols_path [optional]: str | None
-        Path to the file containing covariate names (one per line).
+    data_path:
+        Path to the tabular input dataset.
+    feature_cols_path:
+        Path to a text file containing feature column names.
+    target_col:
+        Name of the target column.
+    split_col:
+        Optional column containing predefined train/test labels.
+    train_label:
+        Value in ``split_col`` that marks training samples.
+    test_label:
+        Value in ``split_col`` that marks test samples.
+    sample_id_col:
+        Optional column containing sample identifiers.
+    covariate_cols_path:
+        Optional path to a text file containing covariate column names.
     """
+
     data_path: str | Path = "data/input.csv"
     feature_cols_path: str | Path = "data/features.txt"
     target_col: str = "diagnosis"
     split_col: str | None = "split"
     train_label: str | int = "train"
     test_label: str | int = "test"
-    selected_feature_cols_path: str | Path = "data/selected_features.txt"
     sample_id_col: str | None = "sample_id"
-    covariate_cols_path: str | None = None
+    covariate_cols_path: str | Path | None = None
 
 
-def create_input_config(
-        *,
-        data_path: str | Path = "data/input.csv",
-        feature_cols_path: str | Path = "data/features.txt",
-        target_col: str = "diagnosis",
-        split_col: str | None = "split",
-        train_label: str | int = "train",
-        test_label: str | int = "test",
-        selected_feature_cols_path: str | Path = "data/selected_features.txt",
-        sample_id_col: str | None = "sample_id",
-        covariate_cols_path: str | None = None
-) -> InputConfig:
-    """
-    Create an InputConfig instance with the specified parameters.
-
-    Args:
-        data_path : str
-            Path to the input dataset (CSV or TSV).
-        feature_cols_path: str
-            Path to the file containing feature names (one per line).
-        target_col: str
-            Name of the column containing target labels..
-        split_col: str | None
-            Name of the column containing split labels (e.g., "train", "test").
-        train_label: str
-            Label used to identify training samples in the split column.
-        test_label: str
-            Label used to identify testing samples in the split column.
-        selected_feature_cols_path: str
-            Path to the file containing selected feature names (one per line).
-        sample_id_col [optional]: str | None
-            Name of the column containing sample IDs.
-        covariate_cols_path [optional]: str | None
-            Path to the file containing covariate names (one per line).
-
-    Returns:
-        InputConfig: An initialized instance of InputConfig.
-    """
-    return InputConfig(
-        data_path=data_path,
-        feature_cols_path=feature_cols_path,
-        target_col=target_col,
-        split_col=split_col,
-        train_label=train_label,
-        test_label=test_label,
-        selected_feature_cols_path=selected_feature_cols_path,
-        sample_id_col=sample_id_col,
-        covariate_cols_path=covariate_cols_path
-    )
-
-
-### Configuration for Differential Abundance Analysis (DAA) ###
 @dataclass(slots=True, kw_only=True)
-class DAAConfig:
+class PreprocConfig:
     """
-    Configuration for Differential Abundance Analysis (DAA).
-    
+    General preprocessing options before model fitting.
+
     Attributes
     ----------
-    method: str
-        Method to use for DAA (e.g., "linear_regression").
-    alpha: float
-        Significance level for feature selection (default: 0.05).
-    minimum_effect_size: float | None
-        Minimum effect size threshold for feature selection.
-    top_ranks: float | None
-        Top ranks threshold for feature selection (default: 10). 
-    correction_method: str
-        Method for multiple testing correction (default: "fdr_bh").
+    encode_categorical_covariates:
+        Whether categorical covariates should be one-hot encoded.
+    drop_constant_features:
+        Whether constant feature columns should be removed.
+    outlier_method:
+        Optional named outlier handling strategy.
     """
-    method: str = "linear_regression"
+
+    encode_categorical_covariates: bool = True
+    drop_constant_features: bool = True
+    outlier_method: str | None = None
+
+
+@dataclass(slots=True, kw_only=True)
+class ImputationConfig:
+    """
+    Missing-value imputation options.
+
+    Attributes
+    ----------
+    method:
+        Imputation method. The default planned method is KNN imputation.
+    n_neighbors:
+        Number of neighbors for KNN-style imputation.
+    """
+
+    method: ImputationMethod = "knn"
+    n_neighbors: int = 5
+
+
+@dataclass(slots=True, kw_only=True)
+class NormalizationConfig:
+    """
+    Feature normalization options.
+
+    Attributes
+    ----------
+    method:
+        Normalization method. The default planned method is z-score scaling.
+    with_mean:
+        Whether centering is used for z-score scaling.
+    with_std:
+        Whether standard deviation scaling is used for z-score scaling.
+    """
+
+    method: NormalizationMethod = "zscore"
+    with_mean: bool = True
+    with_std: bool = True
+
+
+@dataclass(slots=True, kw_only=True)
+class FeatureSelectionConfig:
+    """
+    Feature selection options used by the ML pipeline.
+
+    Attributes
+    ----------
+    method:
+        Feature selection method name.
+    alpha:
+        Significance threshold.
+    minimum_effect_size:
+        Optional effect-size threshold.
+    top_ranks:
+        Optional maximum number of selected features.
+    correction_method:
+        Multiple-testing correction method.
+    selected_feature_names:
+        Optional explicit feature subset supplied by the user.
+    """
+
+    method: FeatureSelectionMethod = "LinearRegressionDAA"
     alpha: float = 0.05
-    minimum_effect_size: float | None = 0
-    top_ranks: float | None = 10
-    correction_method: str = "fdr_bh"
+    minimum_effect_size: float | None = 0.0
+    top_ranks: int | None = 10
+    correction_method: CorrectionMethod = "fdr_bh"
+    selected_feature_names: list[str] | None = None
+
+    def __post_init__(self) -> None:
+        """Validate basic feature-selection options."""
+        if not 0.0 <= self.alpha <= 1.0:
+            raise ValueError("alpha must be between 0 and 1")
+        if self.minimum_effect_size is not None and self.minimum_effect_size < 0:
+            raise ValueError("minimum_effect_size must be non-negative")
+        if self.top_ranks is not None and self.top_ranks < 1:
+            raise ValueError("top_ranks must be at least 1")
 
 
-def create_daa_config(
-        *,
-        method: str = "linear_regression",
-        alpha: float = 0.05,
-        minimum_effect_size: float | None = 0,
-        top_ranks: float | None = 10,
-        correction_method: str = "fdr_bh"
-) -> DAAConfig:
+@dataclass(slots=True, kw_only=True)
+class SplitConfig:
     """
-    Create a DAAConfig instance with the specified parameters.
+    Train/test split options.
 
-    Args:
-        method: str
-            Method to use for DAA (e.g., "linear_regression").
-        alpha: float
-            Significance level for feature selection (default: 0.05).
-        minimum_effect_size: float | None
-            Minimum effect size threshold for feature selection.
-        top_ranks: float | None
-            Top ranks threshold for feature selection (default: 10).
-        correction_method: str
-            Method for multiple testing correction (default: "fdr_bh").
-    Returns:
-        DAAConfig: An initialized instance of DAAConfig.
+    Attributes
+    ----------
+    method:
+        Split strategy name.
+    test_fraction:
+        Fraction of samples assigned to the test split.
+    random_state:
+        Optional random seed.
+    stratify:
+        Whether classification splits should preserve label proportions.
     """
-    return DAAConfig(
-        method=method,
-        alpha=alpha,
-        minimum_effect_size=minimum_effect_size,
-        top_ranks=top_ranks,
-        correction_method=correction_method
+
+    method: SplitMethod = "train_test"
+    test_fraction: float = 0.2
+    random_state: int | None = None
+    stratify: bool = True
+
+
+@dataclass(slots=True, kw_only=True)
+class MLConfig:
+    """
+    Machine-learning model and evaluation options.
+
+    Attributes
+    ----------
+    model:
+        Model family name.
+    problem_type:
+        Prediction problem type.
+    metric:
+        Primary evaluation metric.
+    random_state:
+        Optional model random seed.
+    model_params:
+        Optional model-specific parameters.
+    """
+
+    model: MLModelName = "random_forest"
+    problem_type: ProblemType = "binary_classification"
+    metric: EvaluationMetric = "auc"
+    random_state: int | None = None
+    model_params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True, kw_only=True)
+class CheckerConfig:
+    """
+    Leakage-check permutation options.
+
+    Attributes
+    ----------
+    perc_permutation:
+        Fraction of labels to permute in one checker run.
+    n_permutations:
+        Number of repeated permutation runs.
+    random_state:
+        Optional random seed.
+    result_save_path:
+        Optional result path. A ``%random_state`` token may be substituted.
+    """
+
+    perc_permutation: float = 1.0
+    n_permutations: int = 100
+    random_state: int | None = None
+    result_save_path: str | Path | None = None
+
+
+@dataclass(slots=True, kw_only=True)
+class PipelineConfig:
+    """
+    Full configuration for the example ML pipeline.
+
+    Attributes
+    ----------
+    input:
+        Input data configuration.
+    preproc:
+        General preprocessing configuration.
+    imputation:
+        Missing-value imputation configuration.
+    normalization:
+        Feature normalization configuration.
+    feature_selection:
+        Feature selection configuration.
+    split:
+        Train/test split configuration.
+    ml:
+        Model and metric configuration.
+    checker:
+        Leakage checker configuration.
+    """
+
+    input: InputConfig = field(default_factory=InputConfig)
+    preproc: PreprocConfig = field(default_factory=PreprocConfig)
+    imputation: ImputationConfig = field(default_factory=ImputationConfig)
+    normalization: NormalizationConfig = field(default_factory=NormalizationConfig)
+    feature_selection: FeatureSelectionConfig = field(
+        default_factory=FeatureSelectionConfig
     )
+    split: SplitConfig = field(default_factory=SplitConfig)
+    ml: MLConfig = field(default_factory=MLConfig)
+    checker: CheckerConfig = field(default_factory=CheckerConfig)
+
+    def __post_init__(self) -> None:
+        """Coerce nested dictionaries loaded from YAML into config objects."""
+        nested = {
+            "input": InputConfig,
+            "preproc": PreprocConfig,
+            "imputation": ImputationConfig,
+            "normalization": NormalizationConfig,
+            "feature_selection": FeatureSelectionConfig,
+            "split": SplitConfig,
+            "ml": MLConfig,
+            "checker": CheckerConfig,
+        }
+        for attr, cls in nested.items():
+            value = getattr(self, attr)
+            if isinstance(value, dict):
+                setattr(self, attr, cls(**value))
 
 
-
-#### Simulation Configuration ####
 @dataclass(slots=True, kw_only=True)
 class SimulationConfig:
     """
-    Configuration for synthetic data simulation.
+    Synthetic-data simulation options.
 
     Attributes
     ----------
-    n_samples: int
-        Total number of samples to simulate.
-    n_features: int
-        Total number of features to simulate.
-    n_covariates: int
-        Total number of covariates to simulate.
-    effect_fraction: float
-        Fraction of features that have a true effect (between 0 and 1).
-    effect_size: float
-        Effect size (Cohen's d) for the features with a true effect.
-    test_fraction: float
-        Fraction of samples to use as the test set (between 0 and 1).
-    class_balance: float
-        Proportion of positive class samples (between 0 and 1).
-    feature_names [optional]: list[str] | None
-        List of feature names. If None, default names will be generated.
-    covariate_names [optional]: list[str] | None
-        List of covariate names. If None, default names will be generated.
-    random_state: int | None
-        Random seed for reproducibility.
+    n_samples:
+        Number of simulated samples.
+    n_features:
+        Number of simulated features.
+    n_covariates:
+        Number of simulated covariates.
+    effect_fraction:
+        Fraction of features with true signal.
+    effect_size:
+        Effect size for signal features.
+    class_balance:
+        Fraction of positive-class samples.
+    feature_names:
+        Optional feature names.
+    covariate_names:
+        Optional covariate names.
+    random_state:
+        Optional random seed.
     """
+
     n_samples: int = 200
     n_features: int = 100
     n_covariates: int = 3
     effect_fraction: float = 0.1
     effect_size: float = 1.0
-    test_fraction: float = 0.2
     class_balance: float = 0.5
     feature_names: list[str] | None = None
     covariate_names: list[str] | None = None
     random_state: int | None = None
 
 
-def create_simulation_config(
-        *,
-        n_samples: int = 200,
-        n_features: int = 100,
-        n_covariates: int = 3,
-        effect_fraction: float = 0.1,
-        effect_size: float = 1.0,
-        test_fraction: float = 0.2,
-        class_balance: float = 0.5,
-        feature_names: list[str] | None = None,
-        covariate_names: list[str] | None = None,
-        random_state: int | None = None
-) -> SimulationConfig:
+def load_config_yaml(path: str | Path) -> PipelineConfig:
     """
-    Create a SimulationConfig instance with the specified parameters.
+    Load a pipeline configuration from a YAML file.
 
-    Args:
-        n_samples: int
-            Total number of samples to simulate.
-        n_features: int
-            Total number of features to simulate.
-        n_covariates: int
-            Total number of covariates to simulate.
-        effect_fraction: float
-            Fraction of features that have a true effect (between 0 and 1).
-        effect_size: float
-            Effect size (Cohen's d) for the features with a true effect.
-        test_fraction: float
-            Fraction of samples to use as the test set (between 0 and 1).
-        class_balance: float
-            Proportion of positive class samples (between 0 and 1).
-        feature_names [optional]: list[str] | None
-            List of feature names. If None, default names will be generated.
-        covariate_names [optional]: list[str] | None
-            List of covariate names. If None, default names will be generated.
-        random_state: int | None
-            Random seed for reproducibility
+    Parameters
+    ----------
+    path:
+        YAML file path.
 
-    Returns:
-        SimulationConfig: An initialized instance of SimulationConfig.
+    Returns
+    -------
+    PipelineConfig
+        Parsed pipeline configuration.
     """
-    return SimulationConfig(
-        n_samples=n_samples,
-        n_features=n_features,
-        n_covariates=n_covariates,
-        effect_fraction=effect_fraction,
-        effect_size=effect_size,
-        test_fraction=test_fraction,
-        class_balance=class_balance,
-        feature_names=feature_names,
-        covariate_names=covariate_names,
-        random_state=random_state
+    with Path(path).open("r", encoding="utf-8") as file:
+        loaded = yaml.safe_load(file) or {}
+    if not isinstance(loaded, dict):
+        raise ValueError("Configuration YAML must contain a mapping at top level")
+    return _pipeline_config_from_dict(loaded)
+
+
+def save_config_yaml(config: PipelineConfig, path: str | Path) -> None:
+    """
+    Save a pipeline configuration to a YAML file.
+
+    Parameters
+    ----------
+    config:
+        Pipeline configuration to serialize.
+    path:
+        Output YAML file path.
+
+    Returns
+    -------
+    None
+    """
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as file:
+        yaml.safe_dump(_make_yaml_safe(asdict(config)), file, sort_keys=False)
+
+
+def create_default_config() -> PipelineConfig:
+    """
+    Create the default Leakly pipeline configuration.
+
+    Returns
+    -------
+    PipelineConfig
+        Default pipeline configuration.
+    """
+    return PipelineConfig()
+
+
+def _pipeline_config_from_dict(values: dict[str, Any]) -> PipelineConfig:
+    """
+    Build a ``PipelineConfig`` from a nested dictionary.
+
+    Parameters
+    ----------
+    values:
+        Nested configuration dictionary, usually loaded from YAML.
+
+    Returns
+    -------
+    PipelineConfig
+        Parsed configuration with defaults for omitted sections.
+    """
+    values = dict(values)
+    fs_values = dict(values.get("feature_selection", {}) or {})
+    if "daa" in fs_values:
+        raise ValueError(
+            "Nested feature_selection.daa is no longer supported. "
+            "Put alpha, minimum_effect_size, top_ranks, and "
+            "correction_method directly under feature_selection."
+        )
+    if "min_effect_size" in fs_values:
+        fs_values["minimum_effect_size"] = fs_values.pop("min_effect_size")
+
+    return PipelineConfig(
+        input=InputConfig(**(values.get("input", {}) or {})),
+        preproc=PreprocConfig(**(values.get("preproc", {}) or {})),
+        imputation=ImputationConfig(**(values.get("imputation", {}) or {})),
+        normalization=NormalizationConfig(
+            **(values.get("normalization", {}) or {})
+        ),
+        feature_selection=FeatureSelectionConfig(**fs_values),
+        split=SplitConfig(**(values.get("split", {}) or {})),
+        ml=MLConfig(**(values.get("ml", {}) or {})),
+        checker=CheckerConfig(**(values.get("checker", {}) or {})),
     )
+
+
+def _make_yaml_safe(value: Any) -> Any:
+    """Convert dataclass values into plain YAML-safe Python objects."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _make_yaml_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_make_yaml_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_make_yaml_safe(item) for item in value]
+    return value
