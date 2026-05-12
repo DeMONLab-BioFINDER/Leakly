@@ -1,32 +1,101 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 '''
-Feature selection methods for Leakly.
+Feature selection.
 
-This module currently supports one feature selector: ``LinearRegressionDAA``.
-The public wrapper ``feature_selection_method`` dispatches to that method and
-raises an error for any other requested feature-selection method.
+Notes[2024-05-12]
+-----
+- Only supports linear regression differential abundance analysis for now.
+
+Usage
+-----
+```python
+from leakly import FeatureSelectionConfig, feature_selection
+
+selected_features, selected_indices = feature_selection(
+    X, y, covariates, 
+    feature_names=feature_names,
+    config=FeatureSelectionConfig(
+        method="LinearRegressionDAA",
+        alpha=0.05,
+        correction_method="fdr_bh",
+        minimum_effect_size=None,
+        top_ranks=None,
+    ),
+)
+```
+Written by Lijun An and DeMON Lab under MIT license:
+https://github.com/DeMONLab-BioFINDER/DeMONLabLicenses/blob/main/LICENSE
 '''
 from __future__ import annotations
-
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from math import isfinite
 from typing import Any
+ArrayLike = Any
 
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 from scipy import stats as scipy_stats
 
 from .config import FeatureSelectionConfig
 from .stats import adjust_pvalues
 
 
-ArrayLike = Any
+def feature_selection(
+    X: ArrayLike,
+    y: ArrayLike,
+    covariates: ArrayLike | None = None,
+    config: FeatureSelectionConfig | None = None,
+    feature_names: list[str] | None = None,
+    covariate_names: list[str] | None = None,
+) -> tuple[list[str], list[int]]:
+    """
+    Run the configured feature selector.
+
+    Args:
+        X (ArrayLike): 
+            Feature matrix.
+        y (ArrayLike): 
+            Target vector.
+        covariates (ArrayLike | None, optional): 
+            Optional covariate matrix. Defaults to None.
+        config (FeatureSelectionConfig | None, optional): 
+            Feature selection configuration. Defaults to None.
+        feature_names (list[str] | None, optional): 
+            Optional feature names. Defaults to None.
+        covariate_names (list[str] | None, optional): 
+            Optional covariate names. Defaults to None.
+
+    Raises:
+        ValueError: 
+            If the specified feature selection method is not supported.
+
+    Returns:
+        tuple[list[str], list[int]]: 
+            Selected feature names and their corresponding indices.
+        tuple[list[str], list[int]]: _description_
+    """
+    method_name, selection_config = _resolve_feature_selection_config(config)
+    if method_name != "LinearRegressionDAA":
+        raise ValueError(
+            "Unsupported feature selection method: "
+            f"{method_name!r}. Only 'LinearRegressionDAA' is supported."
+        )
+
+    selected_features, selected_indices = LinearRegressionDAA(
+        alpha=selection_config.alpha,
+        correction_method=selection_config.correction_method,
+        minimum_effect_size=selection_config.minimum_effect_size,
+        top_ranks=selection_config.top_ranks,
+    ).run(
+        X, y, covariates, feature_names, covariate_names)
+    return selected_features, selected_indices
 
 
+### Internal helper functions and classes ###
 @dataclass(slots=True)
-class BiomarkerRecord:
+class FeatureRecord:
     """DAA summary statistics for one feature."""
 
     feature_name: str
@@ -36,32 +105,47 @@ class BiomarkerRecord:
     adjusted_p_value: float | None = None
 
 
-class BaseDAAMethod(ABC):
-    """Base class for Differential Abundance Analysis feature selectors."""
+class LinearRegressionDAA:
+    """Differential Abundance Analysis using linear regression."""
 
-    def __init__(self, config: FeatureSelectionConfig | None = None) -> None:
-        """Store method configuration, using defaults when none is provided."""
-        self.config = config or FeatureSelectionConfig()
+    def __init__(
+        self,
+        *,
+        alpha: float = 0.05,
+        correction_method: str = "fdr_bh",
+        minimum_effect_size: float | None = 0.0,
+        top_ranks: int | None = 10,
+    ) -> None:
+        """
+        Initialize linear-regression DAA settings.
+
+        Parameters
+        ----------
+        alpha:
+            Significance threshold applied to adjusted p-values.
+        correction_method:
+            Multiple-testing correction method.
+        minimum_effect_size:
+            Optional minimum absolute effect size.
+        top_ranks:
+            Optional maximum number of selected features.
+        """
+        if not 0.0 <= alpha <= 1.0:
+            raise ValueError("alpha must be between 0 and 1")
+        if minimum_effect_size is not None and minimum_effect_size < 0:
+            raise ValueError("minimum_effect_size must be non-negative")
+        if top_ranks is not None and top_ranks < 1:
+            raise ValueError("top_ranks must be at least 1")
+
+        self.alpha = alpha
+        self.correction_method = correction_method
+        self.minimum_effect_size = minimum_effect_size
+        self.top_ranks = top_ranks
 
     @property
     def method_name(self) -> str:
         """Return the method name."""
         return self.__class__.__name__
-
-    @abstractmethod
-    def fit(
-        self,
-        X: ArrayLike,
-        y: ArrayLike,
-        covariates: ArrayLike | None = None,
-        feature_names: list[str] | None = None,
-        covariate_names: list[str] | None = None,
-    ) -> "BaseDAAMethod":
-        """Fit the DAA method to the provided arrays."""
-
-    @abstractmethod
-    def select_features(self) -> tuple[list[str], list[int]]:
-        """Return selected feature names and indices."""
 
     def run(
         self,
@@ -72,32 +156,25 @@ class BaseDAAMethod(ABC):
         covariate_names: list[str] | None = None,
     ) -> tuple[list[str], list[int]]:
         """
-        Fit the method and return selected features.
+        Run the configured feature selector.
 
-        Parameters
-        ----------
-        X:
-            Feature matrix.
-        y:
-            Target vector.
-        covariates:
-            Optional covariate matrix.
-        feature_names:
-            Optional feature names.
-        covariate_names:
-            Optional covariate names.
+        Args:
+            X (ArrayLike): Feature matrix.
+            y (ArrayLike): Target vector.
+            covariates (ArrayLike | None, optional): 
+                Optional covariate matrix. Defaults to None.
+            feature_names (list[str] | None, optional): 
+                Optional feature names. Defaults to None.
+            covariate_names (list[str] | None, optional): 
+                Optional covariate names. Defaults to None.
 
-        Returns
-        -------
-        tuple[list[str], list[int]]
-            Selected feature names and selected feature indices.
+        Returns:
+            tuple[list[str], list[int]]: 
+                Selected feature names and their corresponding indices.
         """
         self.fit(X, y, covariates, feature_names, covariate_names)
         return self.select_features()
 
-
-class LinearRegressionDAA(BaseDAAMethod):
-    """Differential Abundance Analysis using linear regression."""
 
     def fit(
         self,
@@ -108,25 +185,22 @@ class LinearRegressionDAA(BaseDAAMethod):
         covariate_names: list[str] | None = None,
     ) -> "LinearRegressionDAA":
         """
-        Fit linear-regression DAA.
+        Run linear regression DAA for feature selection.
 
-        Parameters
-        ----------
-        X:
-            Feature matrix.
-        y:
-            Target vector.
-        covariates:
-            Optional covariate matrix.
-        feature_names:
-            Optional feature names.
-        covariate_names:
-            Optional covariate names.
+        Args:
+            X (ArrayLike): 
+                Feature matrix.
+            y (ArrayLike): 
+                Target vector.
+            covariates (ArrayLike | None, optional): 
+                Optional covariate matrix. Defaults to None.
+            feature_names (list[str] | None, optional): 
+                Optional feature names. Defaults to None.
+            covariate_names (list[str] | None, optional): 
+                Optional covariate names. Defaults to None.
 
-        Returns
-        -------
-        LinearRegressionDAA
-            Fitted DAA method.
+        Returns:
+            LinearRegressionDAA: Fitted DAA object.
         """
         x, feature_names = _create_feature_matrix(X, feature_names)
         n_samples = x.shape[0]
@@ -136,10 +210,16 @@ class LinearRegressionDAA(BaseDAAMethod):
         if full_design.shape[0] != n_samples:
             raise ValueError("Design matrix row count does not match X")
 
-        records: list[BiomarkerRecord] = []
+        records: list[FeatureRecord] = []
         p_values: list[float] = []
 
-        for feature_index, feature_name in enumerate(feature_names):
+        feature_iterator = tqdm(
+            enumerate(feature_names),
+            total=len(feature_names),
+            desc="LinearRegressionDAA",
+            unit="feature",
+        )
+        for feature_index, feature_name in feature_iterator:
             response = x[:, feature_index]
             beta_full, sse_full, rank_full = _fit_ols(full_design, response)
             _, sse_reduced, rank_reduced = _fit_ols(reduced_design, response)
@@ -155,7 +235,7 @@ class LinearRegressionDAA(BaseDAAMethod):
             effect_size = float(target_coefficients[0])
 
             records.append(
-                BiomarkerRecord(
+                FeatureRecord(
                     feature_name=feature_name,
                     feature_index=feature_index,
                     effect_size=effect_size,
@@ -163,16 +243,17 @@ class LinearRegressionDAA(BaseDAAMethod):
                 )
             )
             p_values.append(p_value)
-
-        adjusted = adjust_pvalues(p_values, method=self.config.correction_method)
+        # adjust p-values for multiple testing and store in records
+        adjusted = adjust_pvalues(
+            p_values, method=self.correction_method)
         for record, adjusted_p_value in zip(records, adjusted):
             record.adjusted_p_value = adjusted_p_value
 
         self._records = records
         self._metadata = {
-            "alpha": self.config.alpha,
-            "correction_method": self.config.correction_method,
-            "minimum_effect_size": self.config.minimum_effect_size,
+            "alpha": self.alpha,
+            "correction_method": self.correction_method,
+            "minimum_effect_size": self.minimum_effect_size,
             "n_samples": x.shape[0],
             "n_features": len(feature_names),
         }
@@ -182,10 +263,9 @@ class LinearRegressionDAA(BaseDAAMethod):
         """
         Select features based on fitted DAA records.
 
-        Returns
-        -------
-        tuple[list[str], list[int]]
-            Selected feature names and selected feature indices.
+        Returns:
+            tuple[list[str], list[int]]: 
+                Selected feature names and selected feature indices.
         """
         if not hasattr(self, "_records"):
             raise RuntimeError("DAA method has not been fitted")
@@ -199,7 +279,7 @@ class LinearRegressionDAA(BaseDAAMethod):
             ),
         )
 
-        minimum_effect_size = self.config.minimum_effect_size
+        minimum_effect_size = self.minimum_effect_size
         if minimum_effect_size is not None:
             records = [
                 record for record in records
@@ -210,15 +290,15 @@ class LinearRegressionDAA(BaseDAAMethod):
         significant = [
             record for record in records
             if record.adjusted_p_value is not None
-            and record.adjusted_p_value <= self.config.alpha
+            and record.adjusted_p_value <= self.alpha
         ]
         if significant:
             records = significant
-        elif self.config.top_ranks is None:
+        elif self.top_ranks is None:
             records = []
 
-        if self.config.top_ranks is not None:
-            records = records[: int(self.config.top_ranks)]
+        if self.top_ranks is not None:
+            records = records[: int(self.top_ranks)]
 
         return (
             [record.feature_name for record in records],
@@ -226,56 +306,21 @@ class LinearRegressionDAA(BaseDAAMethod):
         )
 
 
-def feature_selection_method(
-    X: ArrayLike,
-    y: ArrayLike,
-    covariates: ArrayLike | None = None,
-    config: FeatureSelectionConfig | None = None,
-    feature_names: list[str] | None = None,
-    covariate_names: list[str] | None = None,
-) -> list[int]:
-    """
-    Run the configured feature selector.
-
-    Only ``LinearRegressionDAA`` is supported. Any other method name raises
-    ``ValueError``.
-
-    Parameters
-    ----------
-    X:
-        Training feature matrix.
-    y:
-        Training target vector.
-    covariates:
-        Optional training covariate matrix.
-    config:
-        Feature selection configuration.
-    feature_names:
-        Optional feature names.
-    covariate_names:
-        Optional covariate names.
-
-    Returns
-    -------
-    list[int]
-        Selected feature indices.
-    """
-    method_name, daa_config = _resolve_feature_selection_config(config)
-    if method_name != "LinearRegressionDAA":
-        raise ValueError(
-            "Unsupported feature selection method: "
-            f"{method_name!r}. Only 'LinearRegressionDAA' is supported."
-        )
-
-    _, selected_indices = LinearRegressionDAA(daa_config).run(
-        X, y, covariates, feature_names, covariate_names)
-    return selected_indices
-
-
 def _resolve_feature_selection_config(
     config: FeatureSelectionConfig | None,
 ) -> tuple[str, FeatureSelectionConfig]:
-    """Return the requested method name and feature-selection config."""
+    """
+    Resolve the feature selection method and configuration.
+
+    Args:
+        config (FeatureSelectionConfig | None): 
+            The feature selection configuration.
+
+    Returns:
+        tuple[str, FeatureSelectionConfig]: 
+            The resolved method name and configuration.
+    """
+
     if config is None:
         config = FeatureSelectionConfig()
     if not isinstance(config, FeatureSelectionConfig):
@@ -284,7 +329,15 @@ def _resolve_feature_selection_config(
 
 
 def _infer_variable_type(variable_vec: ArrayLike) -> str:
-    """Infer whether a vector should be treated as continuous or categorical."""
+    """
+    Infer whether a vector should be treated as continuous or categorical.
+
+    Args:
+        variable_vec (ArrayLike): The variable vector to infer the type of.
+
+    Returns:
+        str: The inferred variable type, either "continuous" or "categorical".
+    """
     variable_series = pd.Series(variable_vec)
     if (
         pd.api.types.is_bool_dtype(variable_series)
@@ -302,7 +355,18 @@ def _create_feature_matrix(
     X: ArrayLike,
     feature_names: list[str] | None = None,
 ) -> tuple[np.ndarray, list[str]]:
-    """Return a numeric feature matrix and validated feature names."""
+    """
+    Create a numeric feature matrix.
+
+    Args:
+        X (ArrayLike): The feature matrix.
+        feature_names (list[str] | None, optional): 
+            The feature names. Defaults to None.
+
+    Returns:
+        tuple[np.ndarray, list[str]]: 
+            The numeric feature matrix and validated feature names.
+    """
     if X is None:
         raise ValueError("X cannot be None")
     x = np.asarray(X, dtype=float)
@@ -327,7 +391,21 @@ def _encode_covariates(
     n_samples: int,
     covariate_names: list[str] | None = None,
 ) -> tuple[np.ndarray, list[str]]:
-    """Encode covariates as a numeric design matrix."""
+    """
+    Encode covariates as a numeric design matrix.
+
+    Args:
+        covariates (ArrayLike | None): T
+            The covariates to encode.
+        n_samples (int): 
+            The number of samples.
+        covariate_names (list[str] | None, optional): 
+            The names of the covariates. Defaults to None.
+
+    Returns:
+        tuple[np.ndarray, list[str]]: 
+            The encoded covariates and their names.
+    """
     if covariates is None:
         return np.empty((n_samples, 0), dtype=float), []
 
@@ -345,7 +423,7 @@ def _encode_covariates(
     ])
     if len(names) != covariate_array.shape[1]:
         raise ValueError(
-            "covariate_names length must match the number of covariate columns")
+            "covariate_names length NOT match the number of covariate columns")
 
     encoded_columns: list[np.ndarray] = []
     encoded_names: list[str] = []
@@ -374,8 +452,20 @@ def _encode_covariates(
     return np.hstack(encoded_columns), encoded_names
 
 
-def _encode_target(vector: ArrayLike, length: int, name: str) -> np.ndarray:
-    """Encode a binary categorical or continuous target as a numeric column."""
+def _encode_target(vector: ArrayLike, 
+                   length: int, 
+                   name: str) -> np.ndarray:
+    """
+    Encode a binary categorical or continuous target as a numeric column.
+
+    Args:
+        vector (ArrayLike): The target vector to encode.
+        length (int): The number of samples.
+        name (str): The name of the target.
+
+    Returns:
+        np.ndarray: The encoded target.
+    """
     if vector is None:
         raise ValueError(f"{name} cannot be None")
     target = np.asarray(vector).reshape(-1)
@@ -407,7 +497,22 @@ def _build_design_matrices(
     covariates: ArrayLike | None = None,
     covariate_names: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, slice]:
-    """Build full and reduced OLS design matrices."""
+    """
+    Build full and reduced OLS design matrices.
+
+    Args:
+        y (ArrayLike): The target vector.
+        n_samples (int): The number of samples.
+        covariates (ArrayLike | None, optional): 
+            The covariates matrix. Defaults to None.
+        covariate_names (list[str] | None, optional): 
+            The names of the covariates. Defaults to None.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray, slice]: 
+            The full and reduced design matrices and 
+            the slice for the target variables.
+    """
     target_matrix = _encode_target(y, length=n_samples, name="y")
     covariate_matrix, _ = _encode_covariates(
         covariates, n_samples, covariate_names)
@@ -419,8 +524,19 @@ def _build_design_matrices(
     return full, reduced, target_slice
 
 
-def _fit_ols(design: np.ndarray, response: np.ndarray) -> tuple[np.ndarray, float, int]:
-    """Fit OLS and return coefficients, SSE, and design rank."""
+def _fit_ols(design: np.ndarray, 
+             response: np.ndarray) -> tuple[np.ndarray, float, int]:
+    """
+    Fit OLS and return coefficients, SSE, and design rank.
+
+    Args:
+        design (np.ndarray): The design matrix.
+        response (np.ndarray): The response vector.
+
+    Returns:
+        tuple[np.ndarray, float, int]: 
+            The fitted coefficients, SSE, and design rank.
+    """
     beta, _, rank, _ = np.linalg.lstsq(design, response, rcond=None)
     residuals = response - design @ beta
     sse = float(np.sum(residuals**2))
@@ -433,7 +549,18 @@ def _partial_f_pvalue(
     df_num: int,
     df_den: int,
 ) -> float:
-    """Return the partial F-test p-value for nested OLS models."""
+    """
+    Return the partial F-test p-value for nested OLS models.
+
+    Args:
+        sse_full (float): The SSE of the full model.
+        sse_reduced (float): The SSE of the reduced model.
+        df_num (int): The degrees of freedom for the numerator.
+        df_den (int): The degrees of freedom for the denominator.
+
+    Returns:
+        float: The partial F-test p-value.
+    """
     if df_num <= 0 or df_den <= 0:
         return 1.0
 
@@ -446,3 +573,7 @@ def _partial_f_pvalue(
 
     p_value = float(scipy_stats.f.sf(f_statistic, df_num, df_den))
     return p_value if isfinite(p_value) else 1.0
+
+def tqdm(iterable, **_: Any):
+    """Fallback iterator when tqdm is not installed."""
+    return iterable

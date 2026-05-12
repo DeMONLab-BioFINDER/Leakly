@@ -25,7 +25,7 @@ from .data import (
     transform_normalizer,
     validate_arrays,
 )
-from .feature_selection import feature_selection_method
+from .feature_selection import feature_selection
 from .models import create_model
 
 
@@ -180,21 +180,22 @@ class ExampleMLPipeline(BaseMLPipeline):
         """
         X_train = np.asarray(processed_data["X_train"], dtype=float)
         X_test = np.asarray(processed_data["X_test"], dtype=float)
-        selected = feature_selection_method(
+        selected_feature_names, selected_feature_indices = feature_selection(
             X_train,
             processed_data["y_train"],
             processed_data["covariates_train"],
             self.config.feature_selection,
             self.feature_names,
         )
-        if not selected:
+        if not selected_feature_indices:
             raise ValueError("Feature selection returned no features")
         selected_data = dict(processed_data)
         selected_data.update(
             {
-                "X_train_features": X_train[:, selected],
-                "X_test_features": X_test[:, selected],
-                "selected_feature_indices": selected,
+                "X_train_features": X_train[:, selected_feature_indices],
+                "X_test_features": X_test[:, selected_feature_indices],
+                "selected_feature_names": selected_feature_names,
+                "selected_feature_indices": selected_feature_indices,
             }
         )
         return selected_data

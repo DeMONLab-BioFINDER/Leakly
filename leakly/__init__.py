@@ -23,9 +23,8 @@ from .config import (
     save_config_yaml,
 )
 from .feature_selection import (
-    BaseDAAMethod,
     LinearRegressionDAA,
-    feature_selection_method,
+    feature_selection,
 )
 from .ml_pipeline import BaseMLPipeline, ExampleMLPipeline
 from .models import BaseMLModel, RandomForestModel, SklearnModel, create_model
@@ -33,7 +32,6 @@ from .simulation import SimulatedDataset, simulate_dataset
 from .summary import SummaryPlotter
 
 __all__ = [
-    "BaseDAAMethod",
     "BaseMLModel",
     "BaseMLPipeline",
     "CheckerConfig",
@@ -56,7 +54,7 @@ __all__ = [
     "SummaryPlotter",
     "create_model",
     "create_default_config",
-    "feature_selection_method",
+    "feature_selection",
     "load_config_yaml",
     "save_config_yaml",
     "simulate_dataset",

@@ -10,7 +10,7 @@ with randomly permuted labels and inspecting the held-out test scores.
 Leakly uses the standard scientific Python stack:
 
 ```bash
-pip install numpy pandas scipy scikit-learn pyyaml matplotlib
+pip install numpy pandas scipy scikit-learn pyyaml matplotlib tqdm
 ```
 
 ## Minimal Example
