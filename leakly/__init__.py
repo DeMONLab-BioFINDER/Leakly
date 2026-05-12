@@ -27,12 +27,11 @@ from .feature_selection import (
     feature_selection,
 )
 from .ml_pipeline import BaseMLPipeline, ExampleMLPipeline
-from .models import BaseMLModel, RandomForestModel, SklearnModel, create_model
+from .models import SklearnModel, create_model, ml_model
 from .simulation import SimulatedDataset, simulate_dataset
 from .summary import SummaryPlotter
 
 __all__ = [
-    "BaseMLModel",
     "BaseMLPipeline",
     "CheckerConfig",
     "ExampleMLPipeline",
@@ -46,7 +45,6 @@ __all__ = [
     "NormalizationConfig",
     "PipelineConfig",
     "PreprocConfig",
-    "RandomForestModel",
     "SimulatedDataset",
     "SimulationConfig",
     "SklearnModel",
@@ -56,6 +54,7 @@ __all__ = [
     "create_default_config",
     "feature_selection",
     "load_config_yaml",
+    "ml_model",
     "save_config_yaml",
     "simulate_dataset",
 ]

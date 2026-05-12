@@ -1,14 +1,39 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 '''
-Machine-learning model interfaces for Leakly.
+Machine learning model.
 
-Model wrappers are intentionally minimal and sklearn-compatible.
+Notes[2024-05-12]
+-----
+- Uses scikit-learn compatible estimators.
+- Default model is random forest.
+
+Usage
+-----
+```python
+from leakly import MLConfig, ml_model
+
+test_auc = ml_model(
+    X_train_processed,
+    y_train,
+    X_test_processed,
+    y_test,
+    MLConfig(
+        model="random_forest",
+        problem_type="binary_classification",
+        metric="auc",
+        random_state=42,
+        model_params={"n_estimators": 100, "max_depth": 5},
+    ),
+)
+```
+
+Written by Lijun An and DeMON Lab under MIT license:
+https://github.com/DeMONLab-BioFINDER/DeMONLabLicenses/blob/main/LICENSE
 '''
 from __future__ import annotations
-
-from abc import ABC, abstractmethod
 from typing import Any
+ArrayLike = Any
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -19,105 +44,168 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.svm import SVC, SVR
-
 from .config import MLConfig
 
 
-ArrayLike = Any
-
-
-class BaseMLModel(ABC):
+def ml_model(
+    X_train: ArrayLike,
+    y_train: ArrayLike,
+    X_test: ArrayLike,
+    y_test: ArrayLike,
+    config: MLConfig | None = None,
+    estimator: Any | None = None,
+) -> float:
     """
-    Base interface for machine-learning models.
+    Fit a configured sklearn model and return the test-set score.
+
+    Args:
+        X_train (ArrayLike): Training feature matrix.
+        y_train (ArrayLike): Training target vector.
+        X_test (ArrayLike): Test feature matrix.
+        y_test (ArrayLike): Test target vector.
+        config (MLConfig | None, optional): 
+            Model and metric configuration. Defaults to None.
+        estimator (Any | None, optional): 
+            Optional custom sklearn-compatible estimator. Defaults to None.
+
+    Returns:
+        float: Test score using ``config.metric``.
+    """
+    config = config or MLConfig()
+    model = create_model(config=config, estimator=estimator)
+    model.fit(X_train, y_train)
+    return model.evaluate(X_test, y_test, metric=config.metric)
+
+
+
+class SklearnModel:
+    """
+    Base class for wrapping sklearn-compatible ML estimators.
     """
 
-    def __init__(self, config: MLConfig | None = None) -> None:
+    def __init__(self, 
+                 estimator: Any, 
+                 config: MLConfig | None = None) -> None:
         """
-        Store model configuration.
+        Initialize the sklearn model class.
 
-        Parameters
-        ----------
-        config:
-            Optional model configuration.
+        Args:
+            estimator (Any): ML estimator that exposes fit and predict methods.
+            config (MLConfig | None, optional): 
+                _description_. Defaults to None.
         """
         self.config = config or MLConfig()
+        if not hasattr(estimator, "fit") or not hasattr(estimator, "predict"):
+            raise TypeError("estimator must have fit and predict methods")
+        self.estimator = estimator
 
-    @abstractmethod
-    def fit(self, X: ArrayLike, y: ArrayLike) -> "BaseMLModel":
+    def fit(self, 
+            X: ArrayLike, 
+            y: ArrayLike) -> "SklearnModel":
         """
-        Fit the model.
+        Fit the wrapped estimator and return ``self``.
 
-        Parameters
-        ----------
-        X:
-            Training model matrix.
-        y:
-            Training target vector.
+        Args:
+            X (ArrayLike): Feature matrix for training.
+            y (ArrayLike): Target vector for training.
 
-        Returns
-        -------
-        BaseMLModel
-            Fitted model.
+        Returns:
+            SklearnModel: The fitted model.
         """
-        pass
+        self.estimator.fit(X, np.asarray(y).reshape(-1))
+        return self
 
-    @abstractmethod
-    def predict(self, X: ArrayLike) -> ArrayLike:
+    def predict(self, 
+                X: ArrayLike) -> ArrayLike:
         """
-        Predict target labels or values.
+        Predict using the wrapped estimator's predict method.
 
-        Parameters
-        ----------
-        X:
-            Model matrix.
+        Args:
+            X (ArrayLike): Feature matrix for prediction.
 
-        Returns
-        -------
-        ArrayLike
-            Predictions.
+        Returns:
+            ArrayLike: Predicted values.
         """
-        pass
+        return self.estimator.predict(X)
 
     def predict_proba(self, X: ArrayLike) -> ArrayLike:
         """
-        Predict class probabilities when supported by the estimator.
+        Predict probabilities when the wrapped estimator supports them.
 
-        Parameters
-        ----------
-        X:
-            Model matrix.
+        Args:
+            X (ArrayLike): Feature matrix for prediction.
 
-        Returns
-        -------
-        ArrayLike
-            Predicted probabilities.
+        Returns:
+            ArrayLike: Predicted probabilities.
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support predict_proba")
+        if not hasattr(self.estimator, "predict_proba"):
+            raise NotImplementedError(
+                f"{self.estimator.__class__.__name__} does not provide "
+                "predict_proba"
+            )
+        return self.estimator.predict_proba(X)
 
-    def evaluate(self, X: ArrayLike, y: ArrayLike, metric: str = "auc") -> float:
+    def decision_scores(self, X: ArrayLike) -> ArrayLike:
         """
-        Evaluate the model on held-out data.
+        Return one-dimensional continuous scores for ROC AUC.
 
-        Parameters
-        ----------
-        X:
-            Test model matrix.
-        y:
-            Test target vector.
-        metric:
-            Evaluation metric name.
+        This follows sklearn conventions: class probabilities are preferred,
+        decision-function scores are used next, and hard predictions are a
+        fallback for estimators that expose neither.
 
-        Returns
-        -------
-        float
-            Evaluation score.
+        Args:
+            X (ArrayLike): Feature matrix for prediction.
+
+        Returns:
+            ArrayLike: One-dimensional scores for each sample.
         """
-        metric = metric.lower()
+        try:
+            probabilities = np.asarray(self.predict_proba(X))
+        except NotImplementedError:
+            probabilities = None
+
+        if probabilities is not None:
+            if probabilities.ndim == 2:
+                if probabilities.shape[1] != 2:
+                    raise ValueError(
+                        "AUC evaluation currently supports binary targets")
+                return probabilities[:, 1]
+            return probabilities.reshape(-1)
+
+        if hasattr(self.estimator, "decision_function"):
+            scores = np.asarray(self.estimator.decision_function(X))
+            if scores.ndim == 2:
+                if scores.shape[1] != 2:
+                    raise ValueError(
+                        "AUC evaluation currently supports binary targets")
+                scores = scores[:, 1]
+            return scores.reshape(-1)
+
+        return np.asarray(self.predict(X)).reshape(-1)
+
+    def evaluate(
+        self,
+        X: ArrayLike,
+        y: ArrayLike,
+        metric: str | None = None,
+    ) -> float:
+        """
+        Evaluate the model with a sklearn metric.
+
+        Args:
+            X (ArrayLike): Test feature matrix.
+            y (ArrayLike): Test target vector.
+            metric (str | None, optional): Metric name. Defaults to None.
+
+        Returns:
+            float: Evaluation score.
+        """
+        metric = (metric or self.config.metric).lower()
         y_true = np.asarray(y).reshape(-1)
+
         if metric == "auc":
-            scores = self._score_for_auc(X)
-            return float(roc_auc_score(y_true, scores))
+            return float(roc_auc_score(y_true, self.decision_scores(X)))
+
         y_pred = self.predict(X)
         if metric == "accuracy":
             return float(accuracy_score(y_true, y_pred))
@@ -125,154 +213,84 @@ class BaseMLModel(ABC):
             return float(r2_score(y_true, y_pred))
         if metric == "mse":
             return float(mean_squared_error(y_true, y_pred))
+
         raise ValueError(f"Unsupported evaluation metric: {metric}")
 
-    def _score_for_auc(self, X: ArrayLike) -> ArrayLike:
-        """Return continuous scores suitable for ROC AUC."""
-        try:
-            probabilities = np.asarray(self.predict_proba(X))
-            if probabilities.ndim == 2 and probabilities.shape[1] > 1:
-                return probabilities[:, 1]
-            return probabilities.reshape(-1)
-        except NotImplementedError:
-            predictions = np.asarray(self.predict(X))
-            return predictions.reshape(-1)
 
-
-class SklearnModel(BaseMLModel):
+def _random_forest_estimator(
+        config: MLConfig) -> Any:
     """
-    Adapter for user-provided sklearn-compatible estimators.
+    Create a random forest estimator from ``MLConfig``.
+
+    Args:
+        config (MLConfig): Configuration for the random forest model.
+
+    Returns:
+        Any: The created random forest estimator.
     """
 
-    def __init__(self, estimator: Any, config: MLConfig | None = None) -> None:
-        """
-        Store the wrapped estimator.
+    params = dict(config.model_params)
+    params.setdefault("random_state", config.random_state)
+    params.setdefault("n_estimators", 100)
 
-        Parameters
-        ----------
-        estimator:
-            Object exposing sklearn-style ``fit`` and ``predict`` methods.
-        config:
-            Optional model configuration.
-        """
-        super().__init__(config=config)
-        self.estimator = estimator
-
-    def fit(self, X: ArrayLike, y: ArrayLike) -> "SklearnModel":
-        """
-        Fit the wrapped estimator.
-
-        Parameters
-        ----------
-        X:
-            Training model matrix.
-        y:
-            Training target vector.
-
-        Returns
-        -------
-        SklearnModel
-            Fitted model wrapper.
-        """
-        self.estimator.fit(X, y)
-        return self
-
-    def predict(self, X: ArrayLike) -> ArrayLike:
-        """
-        Predict with the wrapped estimator.
-
-        Parameters
-        ----------
-        X:
-            Model matrix.
-
-        Returns
-        -------
-        ArrayLike
-            Predictions.
-        """
-        return self.estimator.predict(X)
-
-    def predict_proba(self, X: ArrayLike) -> ArrayLike:
-        """
-        Predict probabilities with the wrapped estimator.
-
-        Parameters
-        ----------
-        X:
-            Model matrix.
-
-        Returns
-        -------
-        ArrayLike
-            Predicted probabilities.
-        """
-        if hasattr(self.estimator, "predict_proba"):
-            return self.estimator.predict_proba(X)
-        if hasattr(self.estimator, "decision_function"):
-            scores = self.estimator.decision_function(X)
-            scores = np.asarray(scores)
-            if scores.ndim == 1:
-                return scores
-            return scores[:, -1]
-        return super().predict_proba(X)
+    if config.problem_type == "binary_classification":
+        return RandomForestClassifier(**params)
+    if config.problem_type == "regression":
+        return RandomForestRegressor(**params)
+    raise ValueError(f"Unsupported problem_type: {config.problem_type}")
 
 
-class RandomForestModel(SklearnModel):
+def _svm_estimator(
+        config: MLConfig) -> Any:
     """
-    Default random forest model wrapper.
+    Create an SVM estimator from ``MLConfig``.
+
+    Args:
+        config (MLConfig): Configuration for the SVM model.
+
+    Returns:
+        Any: The created SVM estimator.
     """
+    params = dict(config.model_params)
 
-    def __init__(self, config: MLConfig | None = None) -> None:
-        """
-        Prepare a random forest model wrapper.
-
-        Parameters
-        ----------
-        config:
-            Optional model configuration.
-        """
-        config = config or MLConfig()
-        params = dict(config.model_params)
+    if config.problem_type == "binary_classification":
+        params.setdefault("probability", config.metric == "auc")
         params.setdefault("random_state", config.random_state)
-        params.setdefault("n_estimators", 200)
-        if config.problem_type == "regression":
-            estimator = RandomForestRegressor(**params)
-        else:
-            estimator = RandomForestClassifier(**params)
-        super().__init__(estimator=estimator, config=config)
+        return SVC(**params)
+    if config.problem_type == "regression":
+        return SVR(**params)
+    raise ValueError(f"Unsupported problem_type: {config.problem_type}")
 
 
-def create_model(config: MLConfig | None = None, estimator: Any | None = None) -> BaseMLModel:
+def create_model(
+    config: MLConfig | None = None,
+    estimator: Any | None = None,
+) -> SklearnModel:
     """
     Create a model wrapper from configuration or a custom estimator.
 
-    Parameters
-    ----------
-    config:
-        Optional model configuration.
-    estimator:
-        Optional user-provided sklearn-compatible estimator.
+    Args:
+        config (MLConfig | None, optional): 
+            Configuration for the model. Defaults to None.
+        estimator (Any | None, optional): 
+            Custom sklearn-compatible estimator. Defaults to None.
 
-    Returns
-    -------
-    BaseMLModel
-        Model wrapper.
+    Returns:
+        SklearnModel: A wrapped sklearn model.
     """
     config = config or MLConfig()
+
     if estimator is not None:
         return SklearnModel(estimator=estimator, config=config)
+
     if config.model == "random_forest":
-        return RandomForestModel(config=config)
+        return SklearnModel(_random_forest_estimator(config), config=config)
+
     if config.model == "svm":
-        params = dict(config.model_params)
-        if config.problem_type == "regression":
-            estimator = SVR(**params)
-        else:
-            params.setdefault("probability", config.metric == "auc")
-            params.setdefault("random_state", config.random_state)
-            estimator = SVC(**params)
-        return SklearnModel(estimator=estimator, config=config)
+        return SklearnModel(_svm_estimator(config), config=config)
+
     if config.model == "custom":
-        raise ValueError("A custom estimator must be provided for model='custom'")
+        raise ValueError("Provide estimator=... when config.model='custom'")
+
     raise ValueError(f"Unsupported model: {config.model}")
+

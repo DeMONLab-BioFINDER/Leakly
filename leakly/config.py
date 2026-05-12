@@ -27,21 +27,10 @@ SplitMethod = Literal["train_test", "predefined"]
 
 
 EXAMPLE_CONFIG_YAML = """
-input:
-    data_path: data/input.csv
-    feature_cols_path: data/features.txt
-    target_col: diagnosis
-    split_col: split
-    train_label: train
-    test_label: test
-    sample_id_col: sample_id
-    covariate_cols_path: data/covariates.txt
 preproc:
     encode_categorical_covariates: true
-imputation:
-    method: knn
-normalization:
-    method: zscore
+    imputation_method: knn
+    normalization_method: zscore
 feature_selection:
     method: LinearRegressionDAA
     alpha: 0.05
@@ -59,39 +48,22 @@ checker:
     n_permutations: 100
 """
 
-
 @dataclass(slots=True, kw_only=True)
 class InputConfig:
     """
-    Paths and column names used to load an input dataset.
+    Input data options.
 
-    Attributes
-    ----------
-    data_path:
-        Path to the tabular input dataset.
-    feature_cols_path:
-        Path to a text file containing feature column names.
-    target_col:
-        Name of the target column.
-    split_col:
-        Optional column containing predefined train/test labels.
-    train_label:
-        Value in ``split_col`` that marks training samples.
-    test_label:
-        Value in ``split_col`` that marks test samples.
-    sample_id_col:
-        Optional column containing sample identifiers.
-    covariate_cols_path:
-        Optional path to a text file containing covariate column names.
+    This package primarily works with in-memory arrays, but the fields are kept
+    for YAML-driven pipelines that load tabular data elsewhere.
     """
 
-    data_path: str | Path = "data/input.csv"
-    feature_cols_path: str | Path = "data/features.txt"
-    target_col: str = "diagnosis"
-    split_col: str | None = "split"
+    data_path: str | Path | None = None
+    feature_cols_path: str | Path | None = None
+    target_col: str | None = None
+    split_col: str | None = None
     train_label: str | int = "train"
     test_label: str | int = "test"
-    sample_id_col: str | None = "sample_id"
+    sample_id_col: str | None = None
     covariate_cols_path: str | Path | None = None
 
 
@@ -113,39 +85,25 @@ class PreprocConfig:
     encode_categorical_covariates: bool = True
     drop_constant_features: bool = True
     outlier_method: str | None = None
+    imputation_method: str | None = 'knn'
+    normalization_method: str | None = 'zscore'
 
 
 @dataclass(slots=True, kw_only=True)
 class ImputationConfig:
-    """
-    Missing-value imputation options.
-
-    Attributes
-    ----------
-    method:
-        Imputation method. The default planned method is KNN imputation.
-    n_neighbors:
-        Number of neighbors for KNN-style imputation.
-    """
+    """Missing-value imputation options."""
 
     method: ImputationMethod = "knn"
     n_neighbors: int = 5
 
+    def __post_init__(self) -> None:
+        if self.n_neighbors < 1:
+            raise ValueError("n_neighbors must be at least 1")
+
 
 @dataclass(slots=True, kw_only=True)
 class NormalizationConfig:
-    """
-    Feature normalization options.
-
-    Attributes
-    ----------
-    method:
-        Normalization method. The default planned method is z-score scaling.
-    with_mean:
-        Whether centering is used for z-score scaling.
-    with_std:
-        Whether standard deviation scaling is used for z-score scaling.
-    """
+    """Feature normalization options."""
 
     method: NormalizationMethod = "zscore"
     with_mean: bool = True
@@ -235,7 +193,7 @@ class MLConfig:
     model: MLModelName = "random_forest"
     problem_type: ProblemType = "binary_classification"
     metric: EvaluationMetric = "auc"
-    random_state: int | None = None
+    random_state: int | None = 42
     model_params: dict[str, Any] = field(default_factory=dict)
 
 
