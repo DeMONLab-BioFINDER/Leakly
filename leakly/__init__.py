@@ -9,19 +9,18 @@ users.
 from .checker import LeakageChecker, LeakageCheckerOneRun
 from .config import (
     CheckerConfig,
+    DataProcConfig,
     FeatureSelectionConfig,
-    ImputationConfig,
     InputConfig,
     MLConfig,
-    NormalizationConfig,
     PipelineConfig,
-    PreprocConfig,
     SimulationConfig,
     SplitConfig,
     create_default_config,
     load_config_yaml,
     save_config_yaml,
 )
+from .data import data_split
 from .feature_selection import (
     LinearRegressionDAA,
     feature_selection,
@@ -34,17 +33,15 @@ from .summary import SummaryPlotter
 __all__ = [
     "BaseMLPipeline",
     "CheckerConfig",
+    "DataProcConfig",
     "ExampleMLPipeline",
     "FeatureSelectionConfig",
-    "ImputationConfig",
     "InputConfig",
     "LeakageChecker",
     "LeakageCheckerOneRun",
     "LinearRegressionDAA",
     "MLConfig",
-    "NormalizationConfig",
     "PipelineConfig",
-    "PreprocConfig",
     "SimulatedDataset",
     "SimulationConfig",
     "SklearnModel",
@@ -52,6 +49,7 @@ __all__ = [
     "SummaryPlotter",
     "create_model",
     "create_default_config",
+    "data_split",
     "feature_selection",
     "load_config_yaml",
     "ml_model",

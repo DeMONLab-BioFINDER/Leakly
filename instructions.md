@@ -51,9 +51,7 @@ PipelineClass(
     `covariates`, # optional, covariate variables, N by C
     `config`: # the pipeline should run in order
         {
-            PreprocConfig,
-            ImputationConfig,
-            NormalizationConfig,
+            DataProcConfig,
             FeatureSelectionConfig,
             SplitConfig,
             MLConfig,

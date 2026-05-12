@@ -28,9 +28,11 @@ SplitMethod = Literal["train_test", "predefined"]
 
 EXAMPLE_CONFIG_YAML = """
 preproc:
-    encode_categorical_covariates: true
     imputation_method: knn
+    n_neighbors: 5
     normalization_method: zscore
+    with_mean: true
+    with_std: true
 feature_selection:
     method: LinearRegressionDAA
     alpha: 0.05
@@ -48,66 +50,69 @@ checker:
     n_permutations: 100
 """
 
+
 @dataclass(slots=True, kw_only=True)
 class InputConfig:
     """
-    Input data options.
+    Optional file/input metadata for command-line or YAML-driven workflows.
 
-    This package primarily works with in-memory arrays, but the fields are kept
-    for YAML-driven pipelines that load tabular data elsewhere.
+    The core package APIs operate on arrays directly, so these fields are only
+    metadata for callers that want to load data from files themselves.
     """
 
     data_path: str | Path | None = None
     feature_cols_path: str | Path | None = None
     target_col: str | None = None
     split_col: str | None = None
-    train_label: str | int = "train"
-    test_label: str | int = "test"
+    train_label: str | int | None = None
+    test_label: str | int | None = None
     sample_id_col: str | None = None
     covariate_cols_path: str | Path | None = None
 
 
 @dataclass(slots=True, kw_only=True)
-class PreprocConfig:
+class DataProcConfig:
     """
     General preprocessing options before model fitting.
 
     Attributes
     ----------
-    encode_categorical_covariates:
-        Whether categorical covariates should be one-hot encoded.
-    drop_constant_features:
-        Whether constant feature columns should be removed.
-    outlier_method:
-        Optional named outlier handling strategy.
+    imputation_method:
+        Optional named missing-value imputation strategy.
+    n_neighbors:
+        Number of neighbors used by KNN imputation.
+    normalization_method:
+        Optional named feature normalization strategy.
+    with_mean:
+        Whether z-score normalization should center features.
+    with_std:
+        Whether z-score normalization should scale features.
     """
-
-    encode_categorical_covariates: bool = True
-    drop_constant_features: bool = True
-    outlier_method: str | None = None
-    imputation_method: str | None = 'knn'
-    normalization_method: str | None = 'zscore'
-
-
-@dataclass(slots=True, kw_only=True)
-class ImputationConfig:
-    """Missing-value imputation options."""
-
-    method: ImputationMethod = "knn"
+    imputation_method: ImputationMethod | None = "knn"
     n_neighbors: int = 5
-
-    def __post_init__(self) -> None:
-        if self.n_neighbors < 1:
-            raise ValueError("n_neighbors must be at least 1")
-
-
-@dataclass(slots=True, kw_only=True)
-class NormalizationConfig:
-    """Feature normalization options."""
-
-    method: NormalizationMethod = "zscore"
+    normalization_method: NormalizationMethod | None = "zscore"
     with_mean: bool = True
     with_std: bool = True
+
+    def __post_init__(self) -> None:
+        """Validate preprocessing options."""
+        if self.imputation_method is not None and self.imputation_method not in {
+            "knn",
+            "mean",
+            "median",
+            "most_frequent",
+            "none",
+        }:
+            raise ValueError(
+                f"Unsupported imputation method: {self.imputation_method}")
+        if self.n_neighbors < 1:
+            raise ValueError("n_neighbors must be at least 1")
+        if (
+            self.normalization_method is not None
+            and self.normalization_method not in {"zscore", "minmax", "none"}
+        ):
+            raise ValueError(
+                f"Unsupported normalization method: {self.normalization_method}")
 
 
 @dataclass(slots=True, kw_only=True)
@@ -168,7 +173,7 @@ class SplitConfig:
     method: SplitMethod = "train_test"
     test_fraction: float = 0.2
     random_state: int | None = None
-    stratify: bool = True
+    stratify: bool = False
 
 
 @dataclass(slots=True, kw_only=True)
@@ -231,10 +236,6 @@ class PipelineConfig:
         Input data configuration.
     preproc:
         General preprocessing configuration.
-    imputation:
-        Missing-value imputation configuration.
-    normalization:
-        Feature normalization configuration.
     feature_selection:
         Feature selection configuration.
     split:
@@ -246,9 +247,7 @@ class PipelineConfig:
     """
 
     input: InputConfig = field(default_factory=InputConfig)
-    preproc: PreprocConfig = field(default_factory=PreprocConfig)
-    imputation: ImputationConfig = field(default_factory=ImputationConfig)
-    normalization: NormalizationConfig = field(default_factory=NormalizationConfig)
+    preproc: DataProcConfig = field(default_factory=DataProcConfig)
     feature_selection: FeatureSelectionConfig = field(
         default_factory=FeatureSelectionConfig
     )
@@ -260,9 +259,7 @@ class PipelineConfig:
         """Coerce nested dictionaries loaded from YAML into config objects."""
         nested = {
             "input": InputConfig,
-            "preproc": PreprocConfig,
-            "imputation": ImputationConfig,
-            "normalization": NormalizationConfig,
+            "preproc": DataProcConfig,
             "feature_selection": FeatureSelectionConfig,
             "split": SplitConfig,
             "ml": MLConfig,
@@ -393,11 +390,7 @@ def _pipeline_config_from_dict(values: dict[str, Any]) -> PipelineConfig:
 
     return PipelineConfig(
         input=InputConfig(**(values.get("input", {}) or {})),
-        preproc=PreprocConfig(**(values.get("preproc", {}) or {})),
-        imputation=ImputationConfig(**(values.get("imputation", {}) or {})),
-        normalization=NormalizationConfig(
-            **(values.get("normalization", {}) or {})
-        ),
+        preproc=DataProcConfig(**(values.get("preproc", {}) or {})),
         feature_selection=FeatureSelectionConfig(**fs_values),
         split=SplitConfig(**(values.get("split", {}) or {})),
         ml=MLConfig(**(values.get("ml", {}) or {})),

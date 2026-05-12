@@ -35,8 +35,13 @@ ArrayLike = Any
 
 import numpy as np
 import pandas as pd
-from tqdm.auto import tqdm
 from scipy import stats as scipy_stats
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+    def tqdm(iterable: Any, **_: Any) -> Any:
+        """Fallback iterator when tqdm is not installed."""
+        return iterable
 
 from .config import FeatureSelectionConfig
 from .stats import adjust_pvalues
@@ -573,7 +578,3 @@ def _partial_f_pvalue(
 
     p_value = float(scipy_stats.f.sf(f_statistic, df_num, df_den))
     return p_value if isfinite(p_value) else 1.0
-
-def tqdm(iterable, **_: Any):
-    """Fallback iterator when tqdm is not installed."""
-    return iterable

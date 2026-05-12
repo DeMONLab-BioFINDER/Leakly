@@ -12,18 +12,16 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import numpy as np
-import pandas as pd
 
 from .config import PipelineConfig
 from .data import (
-    combine_features_and_covariates,
     fit_imputer,
     fit_normalizer,
     subset_rows,
     train_test_split_indices,
     transform_imputer,
     transform_normalizer,
-    validate_arrays,
+    validate_data,
 )
 from .feature_selection import feature_selection
 from .models import create_model
@@ -109,7 +107,7 @@ class ExampleMLPipeline(BaseMLPipeline):
             Train/test arrays and related split metadata.
         """
         target = self.y if y is None else y
-        validate_arrays(self.X, target, self.covariates)
+        validate_data(self.X, target, self.covariates)
         train_idx, test_idx = train_test_split_indices(target, self.config.split)
         covariates = self.covariates
         return {
@@ -137,27 +135,19 @@ class ExampleMLPipeline(BaseMLPipeline):
         dict[str, Any]
             Preprocessed train/test arrays.
         """
-        imputer = fit_imputer(split_data["X_train"], self.config.imputation)
+        imputer = fit_imputer(split_data["X_train"], self.config.preproc)
         X_train = transform_imputer(imputer, split_data["X_train"])
         X_test = transform_imputer(imputer, split_data["X_test"])
 
-        normalizer = fit_normalizer(X_train, self.config.normalization)
+        normalizer = fit_normalizer(X_train, self.config.preproc)
         X_train = transform_normalizer(normalizer, X_train)
         X_test = transform_normalizer(normalizer, X_test)
-
-        cov_train, cov_test, covariate_names = _encode_train_test_covariates(
-            split_data["covariates_train"],
-            split_data["covariates_test"],
-        )
 
         processed = dict(split_data)
         processed.update(
             {
                 "X_train": X_train,
                 "X_test": X_test,
-                "covariates_train": cov_train,
-                "covariates_test": cov_test,
-                "covariate_names": covariate_names,
                 "imputer": imputer,
                 "normalizer": normalizer,
             }
@@ -214,12 +204,8 @@ class ExampleMLPipeline(BaseMLPipeline):
         Any
             Fitted model object.
         """
-        X_model = combine_features_and_covariates(
-            selected_data["X_train_features"],
-            selected_data["covariates_train"],
-        )
         model = create_model(self.config.ml)
-        model.fit(X_model, selected_data["y_train"])
+        model.fit(selected_data["X_train_features"], selected_data["y_train"])
         self.model_ = model
         return model
 
@@ -239,11 +225,11 @@ class ExampleMLPipeline(BaseMLPipeline):
         float
             Test set score.
         """
-        X_model = combine_features_and_covariates(
+        return model.evaluate(
             selected_data["X_test_features"],
-            selected_data["covariates_test"],
+            selected_data["y_test"],
+            self.config.ml.metric,
         )
-        return model.evaluate(X_model, selected_data["y_test"], self.config.ml.metric)
 
     def run(self, y: ArrayLike | None = None) -> float:
         """
@@ -269,43 +255,3 @@ class ExampleMLPipeline(BaseMLPipeline):
         self.selected_feature_indices_ = selected["selected_feature_indices"]
         self.test_score_ = score
         return float(score)
-
-
-def _encode_train_test_covariates(
-    covariates_train: ArrayLike | None,
-    covariates_test: ArrayLike | None,
-) -> tuple[ArrayLike | None, ArrayLike | None, list[str] | None]:
-    """One-hot encode train covariates and align test columns to train."""
-    if covariates_train is None:
-        return None, None, None
-    train_frame = _covariates_to_frame(covariates_train)
-    test_frame = _covariates_to_frame(covariates_test)
-    categorical_columns = [
-        column for column in train_frame.columns
-        if (
-            pd.api.types.is_object_dtype(train_frame[column])
-            or pd.api.types.is_bool_dtype(train_frame[column])
-            or isinstance(train_frame[column].dtype, pd.CategoricalDtype)
-        )
-    ]
-    train_encoded = pd.get_dummies(
-        train_frame, columns=categorical_columns, drop_first=True, dtype=float)
-    test_encoded = pd.get_dummies(
-        test_frame, columns=categorical_columns, drop_first=True, dtype=float)
-    test_encoded = test_encoded.reindex(columns=train_encoded.columns, fill_value=0.0)
-    return (
-        train_encoded.to_numpy(dtype=float),
-        test_encoded.to_numpy(dtype=float),
-        train_encoded.columns.tolist(),
-    )
-
-
-def _covariates_to_frame(covariates: ArrayLike) -> pd.DataFrame:
-    """Convert covariates into a DataFrame with stable generated names."""
-    array = np.asarray(covariates)
-    if array.ndim == 1:
-        array = array.reshape(-1, 1)
-    return pd.DataFrame(
-        array,
-        columns=[f"covariate_{index + 1}" for index in range(array.shape[1])],
-    )
