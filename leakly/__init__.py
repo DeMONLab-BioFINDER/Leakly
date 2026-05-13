@@ -6,7 +6,7 @@ Public API for Leakly.
 This module collects the high-level classes and helpers intended for package
 users.
 '''
-# from .checker import LeakageChecker, LeakageCheckerOneRun
+
 from .config import (
     FeatureSelectionConfig,
     ImputationConfig,
@@ -30,14 +30,13 @@ from .feature_selection import (
 )
 from .ml_pipeline import MLPipeline
 from .models import SklearnModel, create_model, ml_model
+from .permutation import permute_label
 from .simulation import SimulatedDataset, simulate_dataset
 from .summary import SummaryPlotter
 
 __all__ = [
     "FeatureSelectionConfig",
     "ImputationConfig",
-    "LeakageChecker",
-    "LeakageCheckerOneRun",
     "LinearRegressionDAA",
     "MLPipeline",
     "ModelConfig",
@@ -56,6 +55,7 @@ __all__ = [
     "load_example_nonleakage_config",
     "load_config_yaml",
     "ml_model",
+    "permute_label",
     "print_config",
     "save_example_pipeline_configs",
     "save_config_yaml",

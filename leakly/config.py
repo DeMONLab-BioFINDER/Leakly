@@ -89,7 +89,8 @@ class NormalizationConfig:
             "minmax",
             "none",
         }:
-            raise ValueError(f"Unsupported normalization method: {self.method}")
+            raise ValueError(
+                f"Unsupported normalization method: {self.method}")
 
 
 @dataclass(slots=True, kw_only=True)
@@ -124,7 +125,8 @@ class FeatureSelectionConfig:
         """Validate basic feature-selection options."""
         if not 0.0 <= self.alpha <= 1.0:
             raise ValueError("alpha must be between 0 and 1")
-        if self.minimum_effect_size is not None and self.minimum_effect_size < 0:
+        if self.minimum_effect_size is not None and \
+            self.minimum_effect_size < 0:
             raise ValueError("minimum_effect_size must be non-negative")
         if self.top_ranks is not None and self.top_ranks < 1:
             raise ValueError("top_ranks must be at least 1")
@@ -186,7 +188,8 @@ class PipelineConfig:
     """
 
     imputation: ImputationConfig = field(default_factory=ImputationConfig)
-    normalization: NormalizationConfig = field(default_factory=NormalizationConfig)
+    normalization: NormalizationConfig = field(
+        default_factory=NormalizationConfig)
     data_split: SplitConfig = field(default_factory=SplitConfig)
     feature_selection: FeatureSelectionConfig = field(
         default_factory=FeatureSelectionConfig
@@ -261,7 +264,8 @@ def example_config_dict(
     """
     config = create_default_config()
     values = _make_yaml_safe(asdict(config))
-    values = {"pipeline": pipeline_steps or NO_LEAKAGE_PIPELINE_STEPS, **values}
+    values = {
+        "pipeline": pipeline_steps or NO_LEAKAGE_PIPELINE_STEPS, **values}
     return values
 
 
@@ -271,7 +275,8 @@ def save_example_pipeline_configs(
     """
     Generate example leakage and non-leakage pipeline YAML files.
     """
-    output_dir = Path(directory) if directory is not None else Path(__file__).parent
+    output_dir = Path(directory) if directory is not None else Path(
+        __file__).parent
     output_dir.mkdir(parents=True, exist_ok=True)
     leakage_path = output_dir / EXAMPLE_LEAKAGE_PIPELINE_YAML
     no_leakage_path = output_dir / EXAMPLE_NON_LEAKAGE_PIPELINE_YAML
@@ -295,7 +300,8 @@ def load_example_leakage_config() -> dict[str, Any]:
     """
     Load the example leakage pipeline configuration.
     """
-    return _load_yaml_mapping(Path(__file__).parent / EXAMPLE_LEAKAGE_PIPELINE_YAML)
+    return _load_yaml_mapping(
+        Path(__file__).parent / EXAMPLE_LEAKAGE_PIPELINE_YAML)
 
 
 def load_example_nonleakage_config() -> dict[str, Any]:
