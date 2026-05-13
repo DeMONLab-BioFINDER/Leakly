@@ -20,6 +20,16 @@ chance when no true signal is present.
 If it does, the pipeline may be leaking test-set information
 through preprocessing, feature selection, tuning, or another step.
 
+## Principle
+
+1. Permute labels to remove real signal.
+2. Run the full pipeline exactly as a user would run it.
+3. Compare the score distribution with chance level.
+4. Above-chance permuted performance suggests possible leakage.
+
+Leakly includes example configurations for a leaky pipeline and a non-leaky
+pipeline so users can see the effect immediately.
+
 ![Example permutation AUC summary](https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/assets/AUC.png)
 
 ## Install
@@ -85,16 +95,6 @@ for seed in range(100):
 
 SummaryPlotter(scores, chance_level=0.5).plot("assets/AUC.png")
 ```
-
-## Principle
-
-1. Permute labels to remove real signal.
-2. Run the full pipeline exactly as a user would run it.
-3. Compare the score distribution with chance level.
-4. Above-chance permuted performance suggests possible leakage.
-
-Leakly includes example configurations for a leaky pipeline and a non-leaky
-pipeline so users can see the effect immediately.
 
 ## FAQ
 
