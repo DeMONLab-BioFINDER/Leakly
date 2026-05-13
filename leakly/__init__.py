@@ -6,18 +6,21 @@ Public API for Leakly.
 This module collects the high-level classes and helpers intended for package
 users.
 '''
-from .checker import LeakageChecker, LeakageCheckerOneRun
+# from .checker import LeakageChecker, LeakageCheckerOneRun
 from .config import (
-    CheckerConfig,
-    DataProcConfig,
     FeatureSelectionConfig,
-    InputConfig,
-    MLConfig,
+    ImputationConfig,
+    ModelConfig,
+    NormalizationConfig,
     PipelineConfig,
     SimulationConfig,
     SplitConfig,
     create_default_config,
+    load_example_leakage_config,
+    load_example_nonleakage_config,
     load_config_yaml,
+    print_config,
+    save_example_pipeline_configs,
     save_config_yaml,
 )
 from .data import data_split
@@ -25,22 +28,20 @@ from .feature_selection import (
     LinearRegressionDAA,
     feature_selection,
 )
-from .ml_pipeline import BaseMLPipeline, ExampleMLPipeline
+from .ml_pipeline import MLPipeline
 from .models import SklearnModel, create_model, ml_model
 from .simulation import SimulatedDataset, simulate_dataset
 from .summary import SummaryPlotter
 
 __all__ = [
-    "BaseMLPipeline",
-    "CheckerConfig",
-    "DataProcConfig",
-    "ExampleMLPipeline",
     "FeatureSelectionConfig",
-    "InputConfig",
+    "ImputationConfig",
     "LeakageChecker",
     "LeakageCheckerOneRun",
     "LinearRegressionDAA",
-    "MLConfig",
+    "MLPipeline",
+    "ModelConfig",
+    "NormalizationConfig",
     "PipelineConfig",
     "SimulatedDataset",
     "SimulationConfig",
@@ -51,8 +52,12 @@ __all__ = [
     "create_default_config",
     "data_split",
     "feature_selection",
+    "load_example_leakage_config",
+    "load_example_nonleakage_config",
     "load_config_yaml",
     "ml_model",
+    "print_config",
+    "save_example_pipeline_configs",
     "save_config_yaml",
     "simulate_dataset",
 ]

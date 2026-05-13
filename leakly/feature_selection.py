@@ -36,6 +36,7 @@ ArrayLike = Any
 import numpy as np
 import pandas as pd
 from scipy import stats as scipy_stats
+from sklearn.preprocessing import StandardScaler
 try:
     from tqdm.auto import tqdm
 except ImportError:
@@ -442,6 +443,7 @@ def _encode_covariates(
             column = np.asarray(covariate_vector, dtype=float).reshape(-1, 1)
             if not np.all(np.isfinite(column)):
                 raise ValueError("covariates contain infinite values")
+            column = StandardScaler().fit_transform(column)
             encoded_columns.append(column)
             encoded_names.append(covariate_name)
         else:

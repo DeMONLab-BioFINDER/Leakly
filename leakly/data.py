@@ -14,7 +14,7 @@ from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.utils.validation import check_array, check_X_y, column_or_1d
-from .config import DataProcConfig, SplitConfig
+from .config import ImputationConfig, NormalizationConfig, SplitConfig
 
 
 ArrayLike = Any
@@ -133,21 +133,21 @@ def subset_rows(values: ArrayLike | None,
 
 def fit_imputer(
     X_train: ArrayLike,
-    config: DataProcConfig | None = None,
+    config: ImputationConfig | None = None,
 ) -> Any:
     """
     Fit an sklearn imputer on training features only.
 
     Args:
         X_train (ArrayLike): The training feature data.
-        config (DataProcConfig | None, optional): 
+        config (ImputationConfig | None, optional): 
             Configuration for the imputation process. Defaults to None.
 
     Returns:
         Any: The fitted imputer.
     """
-    config = config or DataProcConfig()
-    method = config.imputation_method
+    config = config or ImputationConfig()
+    method = config.method
     if method is None or method == "none":
         return None
     if method == "knn":
@@ -178,7 +178,7 @@ def transform_imputer(imputer: Any,
 
 def fit_normalizer(
     X_train: ArrayLike,
-    config: DataProcConfig | None = None,
+    config: NormalizationConfig | None = None,
 ) -> Any:
     """
     Fit an sklearn scaler on training features only.
@@ -186,14 +186,14 @@ def fit_normalizer(
     Args:
         X_train (ArrayLike): 
             The training feature data.
-        config (DataProcConfig | None, optional): 
+        config (NormalizationConfig | None, optional): 
             Configuration for the normalization process. Defaults to None.
 
     Returns:
         Any: The fitted normalizer.
     """
-    config = config or DataProcConfig()
-    method = config.normalization_method
+    config = config or NormalizationConfig()
+    method = config.method
     if method is None or method == "none":
         return None
     if method == "zscore":

@@ -11,14 +11,14 @@ Notes[2024-05-12]
 Usage
 -----
 ```python
-from leakly import MLConfig, ml_model
+from leakly import ModelConfig, ml_model
 
 test_auc = ml_model(
     X_train_processed,
     y_train,
     X_test_processed,
     y_test,
-    MLConfig(
+    ModelConfig(
         model="random_forest",
         problem_type="binary_classification",
         metric="auc",
@@ -44,7 +44,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.svm import SVC, SVR
-from .config import MLConfig
+from .config import ModelConfig
 
 
 def ml_model(
@@ -52,7 +52,7 @@ def ml_model(
     y_train: ArrayLike,
     X_test: ArrayLike,
     y_test: ArrayLike,
-    config: MLConfig | None = None,
+    config: ModelConfig | None = None,
     estimator: Any | None = None,
 ) -> float:
     """
@@ -63,7 +63,7 @@ def ml_model(
         y_train (ArrayLike): Training target vector.
         X_test (ArrayLike): Test feature matrix.
         y_test (ArrayLike): Test target vector.
-        config (MLConfig | None, optional): 
+        config (ModelConfig | None, optional): 
             Model and metric configuration. Defaults to None.
         estimator (Any | None, optional): 
             Optional custom sklearn-compatible estimator. Defaults to None.
@@ -71,7 +71,7 @@ def ml_model(
     Returns:
         float: Test score using ``config.metric``.
     """
-    config = config or MLConfig()
+    config = config or ModelConfig()
     model = create_model(config=config, estimator=estimator)
     model.fit(X_train, y_train)
     return model.evaluate(X_test, y_test, metric=config.metric)
@@ -85,16 +85,16 @@ class SklearnModel:
 
     def __init__(self, 
                  estimator: Any, 
-                 config: MLConfig | None = None) -> None:
+                 config: ModelConfig | None = None) -> None:
         """
         Initialize the sklearn model class.
 
         Args:
             estimator (Any): ML estimator that exposes fit and predict methods.
-            config (MLConfig | None, optional): 
+            config (ModelConfig | None, optional): 
                 _description_. Defaults to None.
         """
-        self.config = config or MLConfig()
+        self.config = config or ModelConfig()
         if not hasattr(estimator, "fit") or not hasattr(estimator, "predict"):
             raise TypeError("estimator must have fit and predict methods")
         self.estimator = estimator
@@ -218,12 +218,12 @@ class SklearnModel:
 
 
 def _random_forest_estimator(
-        config: MLConfig) -> Any:
+        config: ModelConfig) -> Any:
     """
-    Create a random forest estimator from ``MLConfig``.
+    Create a random forest estimator from ``ModelConfig``.
 
     Args:
-        config (MLConfig): Configuration for the random forest model.
+        config (ModelConfig): Configuration for the random forest model.
 
     Returns:
         Any: The created random forest estimator.
@@ -241,12 +241,12 @@ def _random_forest_estimator(
 
 
 def _svm_estimator(
-        config: MLConfig) -> Any:
+        config: ModelConfig) -> Any:
     """
-    Create an SVM estimator from ``MLConfig``.
+    Create an SVM estimator from ``ModelConfig``.
 
     Args:
-        config (MLConfig): Configuration for the SVM model.
+        config (ModelConfig): Configuration for the SVM model.
 
     Returns:
         Any: The created SVM estimator.
@@ -263,14 +263,14 @@ def _svm_estimator(
 
 
 def create_model(
-    config: MLConfig | None = None,
+    config: ModelConfig | None = None,
     estimator: Any | None = None,
 ) -> SklearnModel:
     """
     Create a model wrapper from configuration or a custom estimator.
 
     Args:
-        config (MLConfig | None, optional): 
+        config (ModelConfig | None, optional): 
             Configuration for the model. Defaults to None.
         estimator (Any | None, optional): 
             Custom sklearn-compatible estimator. Defaults to None.
@@ -278,7 +278,7 @@ def create_model(
     Returns:
         SklearnModel: A wrapped sklearn model.
     """
-    config = config or MLConfig()
+    config = config or ModelConfig()
 
     if estimator is not None:
         return SklearnModel(estimator=estimator, config=config)
@@ -293,4 +293,3 @@ def create_model(
         raise ValueError("Provide estimator=... when config.model='custom'")
 
     raise ValueError(f"Unsupported model: {config.model}")
-

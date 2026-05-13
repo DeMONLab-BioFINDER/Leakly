@@ -1,0 +1,37 @@
+pipeline:
+  - data_split
+  - imputation
+  - normalization
+  - feature_selection
+  - model
+imputation:
+  method: knn
+  n_neighbors: 5
+normalization:
+  method: zscore
+  with_mean: true
+  with_std: true
+data_split:
+  method: train_test
+  test_fraction: 0.2
+  random_state: null
+  stratify: true
+feature_selection:
+  method: LinearRegressionDAA
+  alpha: 0.05
+  minimum_effect_size: 0.0
+  top_ranks: 10
+  correction_method: fdr_bh
+  selected_feature_names: null
+model:
+  model: random_forest
+  problem_type: binary_classification
+  metric: auc
+  random_state: 42
+  model_params:
+    {
+      n_estimators: 100,
+      max_depth: 5,
+      min_samples_split: 2,
+      min_samples_leaf: 1,
+    }
