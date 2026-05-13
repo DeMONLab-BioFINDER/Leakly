@@ -15,99 +15,82 @@ from typing import Any, Literal
 import yaml
 
 
-CovariateType = Literal["continuous", "categorical"]
-CorrectionMethod = Literal["bonferroni", "fdr_bh"]
-EvaluationMetric = Literal["auc", "accuracy", "r2", "mse"]
-FeatureSelectionMethod = Literal["LinearRegressionDAA"]
-ImputationMethod = Literal["knn", "mean", "median", "most_frequent", "none"]
-MLModelName = Literal["random_forest", "svm", "custom"]
-NormalizationMethod = Literal["zscore", "minmax", "none"]
-ProblemType = Literal["binary_classification", "regression"]
-SplitMethod = Literal["train_test", "predefined"]
+NO_LEAKAGE_PIPELINE_STEPS = [
+    "data_split",
+    "imputation",
+    "normalization",
+    "feature_selection",
+    "model",
+]
 
+LEAKAGE_PIPELINE_STEPS = [
+    "imputation",
+    "normalization",
+    "feature_selection",
+    "data_split",
+    "model",
+]
 
-EXAMPLE_CONFIG_YAML = """
-preproc:
-    encode_categorical_covariates: true
-    imputation_method: knn
-    normalization_method: zscore
-feature_selection:
-    method: LinearRegressionDAA
-    alpha: 0.05
-    minimum_effect_size: 0.0
-    top_ranks: 10
-    correction_method: fdr_bh
-split:
-    method: train_test
-    test_fraction: 0.2
-ml:
-    model: random_forest
-    metric: auc
-checker:
-    perc_permutation: 1.0
-    n_permutations: 100
-"""
-
-@dataclass(slots=True, kw_only=True)
-class InputConfig:
-    """
-    Input data options.
-
-    This package primarily works with in-memory arrays, but the fields are kept
-    for YAML-driven pipelines that load tabular data elsewhere.
-    """
-
-    data_path: str | Path | None = None
-    feature_cols_path: str | Path | None = None
-    target_col: str | None = None
-    split_col: str | None = None
-    train_label: str | int = "train"
-    test_label: str | int = "test"
-    sample_id_col: str | None = None
-    covariate_cols_path: str | Path | None = None
-
-
-@dataclass(slots=True, kw_only=True)
-class PreprocConfig:
-    """
-    General preprocessing options before model fitting.
-
-    Attributes
-    ----------
-    encode_categorical_covariates:
-        Whether categorical covariates should be one-hot encoded.
-    drop_constant_features:
-        Whether constant feature columns should be removed.
-    outlier_method:
-        Optional named outlier handling strategy.
-    """
-
-    encode_categorical_covariates: bool = True
-    drop_constant_features: bool = True
-    outlier_method: str | None = None
-    imputation_method: str | None = 'knn'
-    normalization_method: str | None = 'zscore'
+EXAMPLE_LEAKAGE_PIPELINE_YAML = "Example_LeakgePipeline.yaml"
+EXAMPLE_NON_LEAKAGE_PIPELINE_YAML = "Example_NonLeakgePipeline.yaml"
 
 
 @dataclass(slots=True, kw_only=True)
 class ImputationConfig:
-    """Missing-value imputation options."""
+    """
+    Missing-value imputation options.
 
-    method: ImputationMethod = "knn"
+    Attributes
+    ----------
+    method:
+        Optional imputation strategy.
+    n_neighbors:
+        Number of neighbors used by KNN imputation.
+    """
+    method: ImputationMethod | None = "knn"
     n_neighbors: int = 5
 
     def __post_init__(self) -> None:
+        """Validate imputation options."""
+        if self.method is not None and self.method not in {
+            "knn",
+            "mean",
+            "median",
+            "most_frequent",
+            "none",
+        }:
+            raise ValueError(f"Unsupported imputation method: {self.method}")
         if self.n_neighbors < 1:
             raise ValueError("n_neighbors must be at least 1")
 
 
 @dataclass(slots=True, kw_only=True)
 class NormalizationConfig:
-    """Feature normalization options."""
+    """
+    Feature normalization options.
 
-    method: NormalizationMethod = "zscore"
+    Attributes
+    ----------
+    method:
+        Optional normalization strategy.
+    with_mean:
+        Whether z-score normalization should center features.
+    with_std:
+        Whether z-score normalization should scale features.
+    """
+    method: NormalizationMethod | None = "zscore"
     with_mean: bool = True
     with_std: bool = True
+
+    def __post_init__(self) -> None:
+        """Validate normalization options."""
+        if self.method is not None and self.method not in {
+            "zscore",
+            "minmax",
+            "none",
+        }:
+            raise ValueError(
+                f"Unsupported normalization method: {self.method}")
 
 
 @dataclass(slots=True, kw_only=True)
@@ -142,7 +125,8 @@ class FeatureSelectionConfig:
         """Validate basic feature-selection options."""
         if not 0.0 <= self.alpha <= 1.0:
             raise ValueError("alpha must be between 0 and 1")
-        if self.minimum_effect_size is not None and self.minimum_effect_size < 0:
+        if self.minimum_effect_size is not None and \
+            self.minimum_effect_size < 0:
             raise ValueError("minimum_effect_size must be non-negative")
         if self.top_ranks is not None and self.top_ranks < 1:
             raise ValueError("top_ranks must be at least 1")
@@ -168,11 +152,11 @@ class SplitConfig:
     method: SplitMethod = "train_test"
     test_fraction: float = 0.2
     random_state: int | None = None
-    stratify: bool = True
+    stratify: bool = False
 
 
 @dataclass(slots=True, kw_only=True)
-class MLConfig:
+class ModelConfig:
     """
     Machine-learning model and evaluation options.
 
@@ -198,75 +182,28 @@ class MLConfig:
 
 
 @dataclass(slots=True, kw_only=True)
-class CheckerConfig:
-    """
-    Leakage-check permutation options.
-
-    Attributes
-    ----------
-    perc_permutation:
-        Fraction of labels to permute in one checker run.
-    n_permutations:
-        Number of repeated permutation runs.
-    random_state:
-        Optional random seed.
-    result_save_path:
-        Optional result path. A ``%random_state`` token may be substituted.
-    """
-
-    perc_permutation: float = 1.0
-    n_permutations: int = 100
-    random_state: int | None = None
-    result_save_path: str | Path | None = None
-
-
-@dataclass(slots=True, kw_only=True)
 class PipelineConfig:
     """
-    Full configuration for the example ML pipeline.
-
-    Attributes
-    ----------
-    input:
-        Input data configuration.
-    preproc:
-        General preprocessing configuration.
-    imputation:
-        Missing-value imputation configuration.
-    normalization:
-        Feature normalization configuration.
-    feature_selection:
-        Feature selection configuration.
-    split:
-        Train/test split configuration.
-    ml:
-        Model and metric configuration.
-    checker:
-        Leakage checker configuration.
+    Default configuration for the ordered ML pipeline.
     """
 
-    input: InputConfig = field(default_factory=InputConfig)
-    preproc: PreprocConfig = field(default_factory=PreprocConfig)
     imputation: ImputationConfig = field(default_factory=ImputationConfig)
-    normalization: NormalizationConfig = field(default_factory=NormalizationConfig)
+    normalization: NormalizationConfig = field(
+        default_factory=NormalizationConfig)
+    data_split: SplitConfig = field(default_factory=SplitConfig)
     feature_selection: FeatureSelectionConfig = field(
         default_factory=FeatureSelectionConfig
     )
-    split: SplitConfig = field(default_factory=SplitConfig)
-    ml: MLConfig = field(default_factory=MLConfig)
-    checker: CheckerConfig = field(default_factory=CheckerConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
 
     def __post_init__(self) -> None:
         """Coerce nested dictionaries loaded from YAML into config objects."""
         nested = {
-            "input": InputConfig,
-            "preproc": PreprocConfig,
             "imputation": ImputationConfig,
             "normalization": NormalizationConfig,
+            "data_split": SplitConfig,
             "feature_selection": FeatureSelectionConfig,
-            "split": SplitConfig,
-            "ml": MLConfig,
-            "checker": CheckerConfig,
+            "model": ModelConfig,
         }
         for attr, cls in nested.items():
             value = getattr(self, attr)
@@ -312,41 +249,108 @@ class SimulationConfig:
     random_state: int | None = None
 
 
+def create_default_config() -> PipelineConfig:
+    """
+    Create the default non-leaky ML pipeline configuration.
+    """
+    return PipelineConfig()
+
+
+def example_config_dict(
+    pipeline_steps: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Create a YAML-ready example pipeline configuration dictionary.
+    """
+    config = create_default_config()
+    values = _make_yaml_safe(asdict(config))
+    values = {
+        "pipeline": pipeline_steps or NO_LEAKAGE_PIPELINE_STEPS, **values}
+    return values
+
+
+def save_example_pipeline_configs(
+    directory: str | Path | None = None,
+) -> tuple[Path, Path]:
+    """
+    Generate example leakage and non-leakage pipeline YAML files.
+    """
+    output_dir = Path(directory) if directory is not None else Path(
+        __file__).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    leakage_path = output_dir / EXAMPLE_LEAKAGE_PIPELINE_YAML
+    no_leakage_path = output_dir / EXAMPLE_NON_LEAKAGE_PIPELINE_YAML
+
+    with leakage_path.open("w", encoding="utf-8") as file:
+        yaml.safe_dump(
+            example_config_dict(LEAKAGE_PIPELINE_STEPS),
+            file,
+            sort_keys=False,
+        )
+    with no_leakage_path.open("w", encoding="utf-8") as file:
+        yaml.safe_dump(
+            example_config_dict(NO_LEAKAGE_PIPELINE_STEPS),
+            file,
+            sort_keys=False,
+        )
+    return leakage_path, no_leakage_path
+
+
+def load_example_leakage_config() -> dict[str, Any]:
+    """
+    Load the example leakage pipeline configuration.
+    """
+    return _load_yaml_mapping(
+        Path(__file__).parent / EXAMPLE_LEAKAGE_PIPELINE_YAML)
+
+
+def load_example_nonleakage_config() -> dict[str, Any]:
+    """
+    Load the example non-leakage pipeline configuration.
+    """
+    return _load_yaml_mapping(
+        Path(__file__).parent / EXAMPLE_NON_LEAKAGE_PIPELINE_YAML
+    )
+
+
 def load_config_yaml(path: str | Path) -> PipelineConfig:
     """
-    Load a pipeline configuration from a YAML file.
-
-    Parameters
-    ----------
-    path:
-        YAML file path.
-
-    Returns
-    -------
-    PipelineConfig
-        Parsed pipeline configuration.
+    Load a pipeline configuration from YAML.
     """
-    with Path(path).open("r", encoding="utf-8") as file:
-        loaded = yaml.safe_load(file) or {}
-    if not isinstance(loaded, dict):
-        raise ValueError("Configuration YAML must contain a mapping at top level")
-    return _pipeline_config_from_dict(loaded)
+    values = _load_yaml_mapping(path)
+    if "split" in values and "data_split" not in values:
+        values["data_split"] = values.pop("split")
+    if "ml" in values and "model" not in values:
+        values["model"] = values.pop("ml")
+    values.pop("pipeline", None)
+    return PipelineConfig(**values)
+
+
+def print_config(config: Any | None = None) -> None:
+    """
+    Pretty-print a pipeline configuration as YAML.
+    """
+    if config is None:
+        values = example_config_dict()
+    elif isinstance(config, PipelineConfig):
+        values = _make_yaml_safe(asdict(config))
+    elif isinstance(config, dict):
+        values = _make_yaml_safe(config)
+    elif hasattr(config, "config") and hasattr(config, "pipeline"):
+        values = {
+            "pipeline": list(config.pipeline),
+            **_make_yaml_safe(asdict(config.config)),
+        }
+    else:
+        raise TypeError(
+            "config must be a PipelineConfig, dict, MLPipeline, or None"
+        )
+    print(yaml.safe_dump(values, sort_keys=False), end="")
 
 
 def save_config_yaml(config: PipelineConfig, path: str | Path) -> None:
     """
-    Save a pipeline configuration to a YAML file.
-
-    Parameters
-    ----------
-    config:
-        Pipeline configuration to serialize.
-    path:
-        Output YAML file path.
-
-    Returns
-    -------
-    None
+    Save a pipeline configuration to YAML.
     """
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -354,55 +358,12 @@ def save_config_yaml(config: PipelineConfig, path: str | Path) -> None:
         yaml.safe_dump(_make_yaml_safe(asdict(config)), file, sort_keys=False)
 
 
-def create_default_config() -> PipelineConfig:
-    """
-    Create the default Leakly pipeline configuration.
-
-    Returns
-    -------
-    PipelineConfig
-        Default pipeline configuration.
-    """
-    return PipelineConfig()
-
-
-def _pipeline_config_from_dict(values: dict[str, Any]) -> PipelineConfig:
-    """
-    Build a ``PipelineConfig`` from a nested dictionary.
-
-    Parameters
-    ----------
-    values:
-        Nested configuration dictionary, usually loaded from YAML.
-
-    Returns
-    -------
-    PipelineConfig
-        Parsed configuration with defaults for omitted sections.
-    """
-    values = dict(values)
-    fs_values = dict(values.get("feature_selection", {}) or {})
-    if "daa" in fs_values:
-        raise ValueError(
-            "Nested feature_selection.daa is no longer supported. "
-            "Put alpha, minimum_effect_size, top_ranks, and "
-            "correction_method directly under feature_selection."
-        )
-    if "min_effect_size" in fs_values:
-        fs_values["minimum_effect_size"] = fs_values.pop("min_effect_size")
-
-    return PipelineConfig(
-        input=InputConfig(**(values.get("input", {}) or {})),
-        preproc=PreprocConfig(**(values.get("preproc", {}) or {})),
-        imputation=ImputationConfig(**(values.get("imputation", {}) or {})),
-        normalization=NormalizationConfig(
-            **(values.get("normalization", {}) or {})
-        ),
-        feature_selection=FeatureSelectionConfig(**fs_values),
-        split=SplitConfig(**(values.get("split", {}) or {})),
-        ml=MLConfig(**(values.get("ml", {}) or {})),
-        checker=CheckerConfig(**(values.get("checker", {}) or {})),
-    )
+def _load_yaml_mapping(path: str | Path) -> dict[str, Any]:
+    with Path(path).open("r", encoding="utf-8") as file:
+        values = yaml.safe_load(file) or {}
+    if not isinstance(values, dict):
+        raise ValueError("Configuration YAML must contain a mapping")
+    return values
 
 
 def _make_yaml_safe(value: Any) -> Any:

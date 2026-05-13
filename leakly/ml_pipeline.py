@@ -1,311 +1,435 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 '''
-Machine-learning pipeline interfaces for Leakly.
+Machine learning pipeline.
 
-The example pipeline is designed to split data before imputation,
-normalization, feature selection, model fitting, and evaluation.
+Usage
+-----
+```python
+from leakly import load_example_leakage_config, MLPipeline
+
+leakage_config = load_example_leakage_config()
+
+pipeline = MLPipeline(
+    X, y, covariates=simulated.covariates,
+    problem_type="binary_classification",
+    config=leakage_config)
+
+pipeline.fit()
+auc = pipeline.evaluate(metric="auc")
+print(f"Test AUC: {auc:.3f}")
+```
+
+Written by Lijun An and DeMON Lab under MIT license:
+https://github.com/DeMONLab-BioFINDER/DeMONLabLicenses/blob/main/LICENSE
 '''
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import Any
+from pathlib import Path
+from typing import Any, Mapping
 
+import joblib
 import numpy as np
-import pandas as pd
+from sklearn.metrics import (
+    accuracy_score,
+    mean_squared_error,
+    r2_score,
+    roc_auc_score,
+)
 
-from .config import PipelineConfig
+from .config import (
+    NO_LEAKAGE_PIPELINE_STEPS,
+    PipelineConfig,
+    create_default_config,
+)
 from .data import (
-    combine_features_and_covariates,
+    data_split,
     fit_imputer,
     fit_normalizer,
-    subset_rows,
-    train_test_split_indices,
     transform_imputer,
     transform_normalizer,
-    validate_arrays,
+    validate_data,
 )
 from .feature_selection import feature_selection
 from .models import create_model
 
 
-ArrayLike = Any
+STEP_NAMES = {
+    "imputation",
+    "normalization",
+    "feature_selection",
+    "data_split",
+    "model",
+}
 
-
-class BaseMLPipeline(ABC):
+class MLPipeline:
     """
-    Base interface for a user-defined ML pipeline.
-
-    Implementations should store the original target vector as ``self.y`` so
-    leakage checkers can generate replacement labels for permutation runs.
+    Machine learning pipeline that runs steps from the configuration.
     """
-
-    @abstractmethod
-    def run(self, y: ArrayLike | None = None) -> float:
-        """
-        Run the pipeline and return the held-out test score.
-
-        Parameters
-        ----------
-        y:
-            Optional replacement target vector, used by leakage checkers for
-            permuted-label runs.
-
-        Returns
-        -------
-        float
-            Test set score.
-        """
-        pass
-
-
-class ExampleMLPipeline(BaseMLPipeline):
-    """
-    Example non-leaky ML pipeline scaffold.
-    """
-
     def __init__(
         self,
-        X: ArrayLike,
-        y: ArrayLike,
-        covariates: ArrayLike | None = None,
-        config: PipelineConfig | None = None,
+        X: Any,
+        y: Any,
+        covariates: Any | None = None,
+        *,
+        problem_type: str = "binary_classification",
+        config: PipelineConfig | Mapping[str, Any] | None = None,
         feature_names: list[str] | None = None,
+        covariate_names: list[str] | None = None,
     ) -> None:
         """
-        Store pipeline inputs.
+        Initialize the MLPipeline with data, configuration, and pipeline steps.
 
-        Parameters
-        ----------
-        X:
-            Feature matrix.
-        y:
-            Target vector.
-        covariates:
-            Optional covariate matrix.
-        config:
-            Optional full pipeline configuration.
-        feature_names:
-            Optional feature names.
+        Args:
+            X (Any): Feature matrix.
+            y (Any): Target variable.
+            covariates (Any | None, optional): 
+                Covariate matrix. Defaults to None.
+            problem_type (str, optional): 
+                Type of the machine learning problem. 
+                Defaults to "binary_classification".
+            config (PipelineConfig | Mapping[str, Any] | None, optional): 
+                Pipeline configuration. 
+                Defaults to None.
+            feature_names (list[str] | None, optional): 
+                Names of the features. 
+                Defaults to None.
+            covariate_names (list[str] | None, optional): 
+                Names of the covariates. 
+                Defaults to None.
         """
         self.X = X
         self.y = y
         self.covariates = covariates
-        self.config = config or PipelineConfig()
+        self.problem_type = problem_type
         self.feature_names = feature_names
+        self.covariate_names = covariate_names
 
-    def split_data(self, y: ArrayLike | None = None) -> dict[str, Any]:
+        self.config = self._make_config(config)
+        self.config.model.problem_type = problem_type
+        if isinstance(config, Mapping):
+            pipeline = config.get("pipeline") or NO_LEAKAGE_PIPELINE_STEPS
+        else:
+            pipeline = NO_LEAKAGE_PIPELINE_STEPS
+        self.pipeline = self._make_pipeline(pipeline)
+
+        self.X_train = None
+        self.X_test = None
+        self.y_train = None
+        self.y_test = None
+        self.covariates_train = None
+        self.covariates_test = None
+
+        self.imputer = None
+        self.normalizer = None
+        self.selected_feature_names = None
+        self.selected_feature_indices = None
+        self.model = None
+
+        self.fitted_steps: list[tuple[str, Any]] = []
+        self.has_split = False
+        self.is_fitted = False
+
+    def fit(self) -> "MLPipeline":
         """
-        Split arrays into train and test partitions.
+        Fit the pipeline to the training data.
 
-        Parameters
-        ----------
-        y:
-            Optional replacement target vector.
-
-        Returns
-        -------
-        dict[str, Any]
-            Train/test arrays and related split metadata.
+        Returns:
+            MLPipeline: The fitted pipeline.
         """
-        target = self.y if y is None else y
-        validate_arrays(self.X, target, self.covariates)
-        train_idx, test_idx = train_test_split_indices(target, self.config.split)
-        covariates = self.covariates
-        return {
-            "X_train": subset_rows(self.X, train_idx),
-            "X_test": subset_rows(self.X, test_idx),
-            "y_train": subset_rows(target, train_idx),
-            "y_test": subset_rows(target, test_idx),
-            "covariates_train": subset_rows(covariates, train_idx),
-            "covariates_test": subset_rows(covariates, test_idx),
-            "train_idx": train_idx,
-            "test_idx": test_idx,
-        }
-
-    def preprocess_train_test(self, split_data: dict[str, Any]) -> dict[str, Any]:
-        """
-        Fit preprocessing on training data and transform train/test data.
-
-        Parameters
-        ----------
-        split_data:
-            Output from ``split_data``.
-
-        Returns
-        -------
-        dict[str, Any]
-            Preprocessed train/test arrays.
-        """
-        imputer = fit_imputer(split_data["X_train"], self.config.imputation)
-        X_train = transform_imputer(imputer, split_data["X_train"])
-        X_test = transform_imputer(imputer, split_data["X_test"])
-
-        normalizer = fit_normalizer(X_train, self.config.normalization)
-        X_train = transform_normalizer(normalizer, X_train)
-        X_test = transform_normalizer(normalizer, X_test)
-
-        cov_train, cov_test, covariate_names = _encode_train_test_covariates(
-            split_data["covariates_train"],
-            split_data["covariates_test"],
+        validate_data(self.X, self.y, self.covariates)
+        current_X = np.asarray(self.X, dtype=float)
+        current_y = np.asarray(self.y).reshape(-1)
+        current_covariates = (
+            None if self.covariates is None else np.asarray(
+                self.covariates).copy()
         )
+        current_feature_names = self.feature_names
 
-        processed = dict(split_data)
-        processed.update(
-            {
-                "X_train": X_train,
-                "X_test": X_test,
-                "covariates_train": cov_train,
-                "covariates_test": cov_test,
-                "covariate_names": covariate_names,
-                "imputer": imputer,
-                "normalizer": normalizer,
-            }
-        )
-        return processed
+        for step_name in self.pipeline:
+            if step_name == "data_split":
+                (
+                    self.X_train,
+                    self.X_test,
+                    self.y_train,
+                    self.y_test,
+                    self.covariates_train,
+                    self.covariates_test,
+                ) = data_split(
+                    current_X,
+                    current_y,
+                    current_covariates,
+                    self.config.data_split,
+                )
+                self.has_split = True
 
-    def select_features(self, processed_data: dict[str, Any]) -> dict[str, Any]:
+            elif step_name == "imputation":
+                fit_X = self.X_train if self.has_split else current_X
+                self.imputer = fit_imputer(
+                    fit_X, self.config.imputation)
+                if self.has_split:
+                    self.X_train = transform_imputer(
+                        self.imputer, self.X_train)
+                    self.X_test = transform_imputer(
+                        self.imputer, self.X_test)
+                else:
+                    current_X = transform_imputer(
+                        self.imputer, current_X)
+                self.fitted_steps.append(("imputation", self.imputer))
+
+            elif step_name == "normalization":
+                fit_X = self.X_train if self.has_split else current_X
+                self.normalizer = fit_normalizer(
+                    fit_X, self.config.normalization)
+                if self.has_split:
+                    self.X_train = transform_normalizer(
+                        self.normalizer, self.X_train)
+                    self.X_test = transform_normalizer(
+                        self.normalizer, self.X_test)
+                else:
+                    current_X = transform_normalizer(
+                        self.normalizer, current_X)
+                self.fitted_steps.append(("normalization", self.normalizer))
+
+            elif step_name == "feature_selection":
+                if self.has_split:
+                    selected_names, selected_indices = feature_selection(
+                        self.X_train,
+                        self.y_train,
+                        self.covariates_train,
+                        self.config.feature_selection,
+                        current_feature_names,
+                        self.covariate_names,
+                    )
+                    self.X_train = np.asarray(
+                        self.X_train)[:, selected_indices]
+                    self.X_test = np.asarray(
+                        self.X_test)[:, selected_indices]
+                else:
+                    selected_names, selected_indices = feature_selection(
+                        current_X,
+                        current_y,
+                        current_covariates,
+                        self.config.feature_selection,
+                        current_feature_names,
+                        self.covariate_names,
+                    )
+                    current_X = np.asarray(
+                        current_X)[:, selected_indices]
+
+                if not selected_indices:
+                    raise ValueError("Feature selection returned no features")
+                self.selected_feature_names = selected_names
+                self.selected_feature_indices = selected_indices
+                current_feature_names = selected_names
+                self.fitted_steps.append(
+                    ("feature_selection", selected_indices))
+
+            elif step_name == "model":
+                if not self.has_split:
+                    raise ValueError("model step must appear after data_split")
+                self.config.model.problem_type = self.problem_type
+                self.model = create_model(self.config.model)
+                self.model.fit(self.X_train, self.y_train)
+                self.is_fitted = True
+
+        return self
+
+    def predict(self, 
+                X: Any) -> Any:
         """
-        Fit feature selection on training data and transform train/test data.
+        Predict after applying fitted preprocessing and feature selection.
 
-        Parameters
-        ----------
-        processed_data:
-            Output from ``preprocess_train_test``.
+        Args:
+            X (Any): The input data for prediction.
 
-        Returns
-        -------
-        dict[str, Any]
-            Feature-selected train/test arrays and selection metadata.
+        Returns:
+            Any: The predicted values.
         """
-        X_train = np.asarray(processed_data["X_train"], dtype=float)
-        X_test = np.asarray(processed_data["X_test"], dtype=float)
-        selected_feature_names, selected_feature_indices = feature_selection(
-            X_train,
-            processed_data["y_train"],
-            processed_data["covariates_train"],
-            self.config.feature_selection,
-            self.feature_names,
-        )
-        if not selected_feature_indices:
-            raise ValueError("Feature selection returned no features")
-        selected_data = dict(processed_data)
-        selected_data.update(
-            {
-                "X_train_features": X_train[:, selected_feature_indices],
-                "X_test_features": X_test[:, selected_feature_indices],
-                "selected_feature_names": selected_feature_names,
-                "selected_feature_indices": selected_feature_indices,
-            }
-        )
-        return selected_data
+        self._require_fitted()
+        return self.model.predict(self._transform_new_X(X))
 
-    def fit_model(self, selected_data: dict[str, Any]) -> Any:
+    def predict_proba(self, X: Any) -> Any:
         """
-        Fit the configured machine-learning model.
+        Predict probabilities after applying fitted preprocessing.
 
-        Parameters
-        ----------
-        selected_data:
-            Output from ``select_features``.
+        Args:
+            X (Any): The input data for prediction.
 
-        Returns
-        -------
-        Any
-            Fitted model object.
+        Returns:
+            Any: The predicted probabilities.
         """
-        X_model = combine_features_and_covariates(
-            selected_data["X_train_features"],
-            selected_data["covariates_train"],
-        )
-        model = create_model(self.config.ml)
-        model.fit(X_model, selected_data["y_train"])
-        self.model_ = model
-        return model
+        self._require_fitted()
+        return self.model.predict_proba(self._transform_new_X(X))
 
-    def evaluate_model(self, model: Any, selected_data: dict[str, Any]) -> float:
+    def evaluate(
+        self,
+        y_true: Any | None = None,
+        y_pred: Any | None = None,
+        X: Any | None = None,
+        metric: str | None = None,
+    ) -> float:
         """
-        Evaluate a fitted model on held-out test data.
+        Evaluate provided predictions, provided X, or the stored test split.
 
-        Parameters
-        ----------
-        model:
-            Fitted model object.
-        selected_data:
-            Output from ``select_features``.
+        Args:
+            y_true (Any | None, optional): The true labels. Defaults to None.
+            y_pred (Any | None, optional): The predicted labels. Defaults to None.
+            X (Any | None, optional): The input data for evaluation. Defaults to None.
+            metric (str | None, optional): The evaluation metric. Defaults to None.
 
-        Returns
-        -------
-        float
-            Test set score.
+        Raises:
+            ValueError: If the required arguments are not provided.
+
+        Returns:
+            float: The evaluation score.
         """
-        X_model = combine_features_and_covariates(
-            selected_data["X_test_features"],
-            selected_data["covariates_test"],
-        )
-        return model.evaluate(X_model, selected_data["y_test"], self.config.ml.metric)
+        self._require_fitted()
+        metric = (metric or self.config.model.metric).lower()
 
-    def run(self, y: ArrayLike | None = None) -> float:
+        if y_pred is not None:
+            if y_true is None:
+                raise ValueError("y_true is required when y_pred is provided")
+            return _score_predictions(y_true, y_pred, metric)
+
+        if X is not None:
+            if y_true is None:
+                raise ValueError("y_true is required when X is provided")
+            return self.model.evaluate(
+                self._transform_new_X(X), y_true, metric)
+
+        return self.model.evaluate(self.X_test, self.y_test, metric)
+
+    def save(self, path: str | Path) -> None:
         """
-        Run split, preprocessing, feature selection, fitting, and evaluation.
+        Save the fitted pipeline, model, and configuration to one joblib file.
 
-        Parameters
-        ----------
-        y:
-            Optional replacement target vector.
-
-        Returns
-        -------
-        float
-            Test set score.
+        Args:
+            path (str | Path): The path where the pipeline will be saved.
         """
-        split = self.split_data(y)
-        processed = self.preprocess_train_test(split)
-        selected = self.select_features(processed)
-        model = self.fit_model(selected)
-        score = self.evaluate_model(model, selected)
-        self.train_idx_ = selected["train_idx"]
-        self.test_idx_ = selected["test_idx"]
-        self.selected_feature_indices_ = selected["selected_feature_indices"]
-        self.test_score_ = score
-        return float(score)
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self, output_path)
+
+    @classmethod
+    def load(cls, path: str | Path) -> "MLPipeline":
+        """
+        Load a pipeline saved by ``save``.
+
+        Args:
+            path (str | Path): The path to the saved pipeline.
+
+        Returns:
+            MLPipeline: MLPipeline instance loaded from the specified path.
+        """
+        return joblib.load(path)
+
+    @staticmethod
+    def _make_config(
+        config: PipelineConfig | Mapping[str, Any] | None,
+    ) -> PipelineConfig:
+        """
+        Create a pipeline configuration from the provided input.
+
+        Args:
+            config (PipelineConfig | Mapping[str, Any] | None): 
+            The configuration input.
+
+        Returns:
+            PipelineConfig: The created pipeline configuration.
+        """
+        if config is None:
+            return create_default_config()
+        if isinstance(config, PipelineConfig):
+            return config
+        if isinstance(config, Mapping):
+            values = dict(config)
+            values.pop("pipeline", None)
+            return PipelineConfig(**values)
+        raise TypeError("config must be a PipelineConfig, mapping, or None")
+
+    @staticmethod
+    def _make_pipeline(pipeline: list[str]) -> list[str]:
+        """
+        Make a validated pipeline list from the provided input.
+
+        Args:
+            pipeline (list[str]): The pipeline steps to validate.
+
+        Returns:
+            list[str]: The validated pipeline steps.
+        """
+        steps = list(pipeline)
+        for step_name in steps:
+            if step_name not in STEP_NAMES:
+                raise ValueError(f"Unsupported pipeline step: {step_name}")
+
+        if "data_split" not in steps:
+            raise ValueError("pipeline must include data_split")
+        if "model" not in steps:
+            raise ValueError("pipeline must include model")
+        if steps[-1] != "model":
+            raise ValueError("model step must be the final pipeline step")
+        if steps.index("model") < steps.index("data_split"):
+            raise ValueError("model step must appear after data_split")
+        return steps
+
+    def _transform_new_X(self, X: Any) -> np.ndarray:
+        """
+        Transform new input data using the fitted pipeline steps.
+
+        Args:
+            X (Any): The input data to transform.
+
+        Returns:
+            np.ndarray: The transformed input data.
+        """
+        transformed = np.asarray(X, dtype=float)
+        for step_name, fitted_object in self.fitted_steps:
+            if step_name == "imputation":
+                transformed = transform_imputer(fitted_object, transformed)
+            elif step_name == "normalization":
+                transformed = transform_normalizer(fitted_object, transformed)
+            elif step_name == "feature_selection":
+                transformed = transformed[:, fitted_object]
+        return transformed
+
+    def _require_fitted(self) -> None:
+        if not self.is_fitted or self.model is None:
+            raise RuntimeError("MLPipeline must be fitted before use")
 
 
-def _encode_train_test_covariates(
-    covariates_train: ArrayLike | None,
-    covariates_test: ArrayLike | None,
-) -> tuple[ArrayLike | None, ArrayLike | None, list[str] | None]:
-    """One-hot encode train covariates and align test columns to train."""
-    if covariates_train is None:
-        return None, None, None
-    train_frame = _covariates_to_frame(covariates_train)
-    test_frame = _covariates_to_frame(covariates_test)
-    categorical_columns = [
-        column for column in train_frame.columns
-        if (
-            pd.api.types.is_object_dtype(train_frame[column])
-            or pd.api.types.is_bool_dtype(train_frame[column])
-            or isinstance(train_frame[column].dtype, pd.CategoricalDtype)
-        )
-    ]
-    train_encoded = pd.get_dummies(
-        train_frame, columns=categorical_columns, drop_first=True, dtype=float)
-    test_encoded = pd.get_dummies(
-        test_frame, columns=categorical_columns, drop_first=True, dtype=float)
-    test_encoded = test_encoded.reindex(columns=train_encoded.columns, fill_value=0.0)
-    return (
-        train_encoded.to_numpy(dtype=float),
-        test_encoded.to_numpy(dtype=float),
-        train_encoded.columns.tolist(),
-    )
+def _score_predictions(
+    y_true: Any,
+    y_pred: Any,
+    metric: str,
+) -> float:
+    """
+    Score predictions using the specified metric.
 
+    Args:
+        y_true (Any): The true labels.
+        y_pred (Any): The predicted labels.
+        metric (str): The metric to use for scoring.
 
-def _covariates_to_frame(covariates: ArrayLike) -> pd.DataFrame:
-    """Convert covariates into a DataFrame with stable generated names."""
-    array = np.asarray(covariates)
-    if array.ndim == 1:
-        array = array.reshape(-1, 1)
-    return pd.DataFrame(
-        array,
-        columns=[f"covariate_{index + 1}" for index in range(array.shape[1])],
-    )
+    Returns:
+        float: The score.
+    """
+    y_true_array = np.asarray(y_true).reshape(-1)
+    y_pred_array = np.asarray(y_pred)
+
+    if metric == "auc":
+        if y_pred_array.ndim == 2:
+            if y_pred_array.shape[1] != 2:
+                raise ValueError(
+                    "AUC evaluation currently supports binary targets")
+            y_pred_array = y_pred_array[:, 1]
+        return float(roc_auc_score(y_true_array, y_pred_array.reshape(-1)))
+    if metric == "accuracy":
+        return float(accuracy_score(y_true_array, y_pred_array.reshape(-1)))
+    if metric == "r2":
+        return float(r2_score(y_true_array, y_pred_array.reshape(-1)))
+    if metric == "mse":
+        return float(
+            mean_squared_error(y_true_array, y_pred_array.reshape(-1)))
+    raise ValueError(f"Unsupported evaluation metric: {metric}")
