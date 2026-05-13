@@ -55,6 +55,7 @@ def feature_selection(
     config: FeatureSelectionConfig | None = None,
     feature_names: list[str] | None = None,
     covariate_names: list[str] | None = None,
+    show_progress: bool = False,
 ) -> tuple[list[str], list[int]]:
     """
     Run the configured feature selector.
@@ -72,6 +73,8 @@ def feature_selection(
             Optional feature names. Defaults to None.
         covariate_names (list[str] | None, optional): 
             Optional covariate names. Defaults to None.
+        show_progress (bool, optional):
+            Whether to show a progress bar. Defaults to False.
 
     Raises:
         ValueError: 
@@ -94,6 +97,7 @@ def feature_selection(
         correction_method=selection_config.correction_method,
         minimum_effect_size=selection_config.minimum_effect_size,
         top_ranks=selection_config.top_ranks,
+        show_progress=show_progress,
     ).run(
         X, y, covariates, feature_names, covariate_names)
     return selected_features, selected_indices
@@ -121,6 +125,7 @@ class LinearRegressionDAA:
         correction_method: str = "fdr_bh",
         minimum_effect_size: float | None = 0.0,
         top_ranks: int | None = 10,
+        show_progress: bool = False,
     ) -> None:
         """
         Initialize linear-regression DAA settings.
@@ -135,6 +140,8 @@ class LinearRegressionDAA:
             Optional minimum absolute effect size.
         top_ranks:
             Optional maximum number of selected features.
+        show_progress:
+            Whether to show a progress bar while fitting.
         """
         if not 0.0 <= alpha <= 1.0:
             raise ValueError("alpha must be between 0 and 1")
@@ -147,6 +154,7 @@ class LinearRegressionDAA:
         self.correction_method = correction_method
         self.minimum_effect_size = minimum_effect_size
         self.top_ranks = top_ranks
+        self.show_progress = show_progress
 
     @property
     def method_name(self) -> str:
@@ -224,6 +232,7 @@ class LinearRegressionDAA:
             total=len(feature_names),
             desc="LinearRegressionDAA",
             unit="feature",
+            disable=(not self.show_progress),
         )
         for feature_index, feature_name in feature_iterator:
             response = x[:, feature_index]

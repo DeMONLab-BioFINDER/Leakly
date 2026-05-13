@@ -55,34 +55,34 @@ def adjust_pvalues(
     raise ValueError(f"Unsupported p-value adjustment method: {method}")
 
 
-def permutation_test_auc(
-    observed_auc: float,
-    permuted_aucs: Sequence[float],
-    alternative: str = "greater",
+def permutation_test(
+    value2compare: float,
+    permuted_values: Sequence[float],
+    alternative: str = "less",
 ) -> float:
     """
-    Compute a permutation-test p-value for an observed AUC.
+    Compute a permutation-test p-value for an observed value.
 
-    Parameters
-    ----------
-    observed_auc:
-        AUC from the unpermuted pipeline.
-    permuted_aucs:
-        AUC values from permuted-label pipeline runs.
-    alternative:
-        Alternative hypothesis direction.
+    Args:
+        value2compare (float): Value to compare against permuted values.
+        permuted_values (Sequence[float]): Permuted values for comparison.
+        alternative (str, optional): 
+            Alternative hypothesis direction. Defaults to "less".
 
-    Returns
-    -------
-    float
-        Permutation-test p-value.
+    Raises:
+        ValueError: _description_
+        ValueError: _description_
+        ValueError: _description_
+
+    Returns:
+        float: _description_
     """
-    observed = float(observed_auc)
-    permuted = np.asarray(list(permuted_aucs), dtype=float)
+    observed = float(value2compare)
+    permuted = np.asarray(list(permuted_values), dtype=float)
     if permuted.size == 0:
-        raise ValueError("permuted_aucs must contain at least one value")
+        raise ValueError("permuted_values must contain at least one value")
     if not np.isfinite(observed) or np.any(~np.isfinite(permuted)):
-        raise ValueError("AUC values must be finite")
+        raise ValueError("Values must be finite")
 
     alternative = alternative.lower()
     if alternative == "greater":
@@ -96,32 +96,3 @@ def permutation_test_auc(
         raise ValueError(
             "alternative must be 'greater', 'less', or 'two-sided'")
     return float((count + 1) / (permuted.size + 1))
-
-
-def summarize_scores(scores: Sequence[float]) -> dict[str, float]:
-    """
-    Summarize a sequence of evaluation scores.
-
-    Parameters
-    ----------
-    scores:
-        Evaluation scores.
-
-    Returns
-    -------
-    dict[str, float]
-        Summary statistics such as mean, median, and standard deviation.
-    """
-    values = np.asarray(list(scores), dtype=float)
-    if values.size == 0:
-        raise ValueError("scores must contain at least one value")
-    if np.any(~np.isfinite(values)):
-        raise ValueError("scores must be finite")
-    return {
-        "n": float(values.size),
-        "mean": float(np.mean(values)),
-        "median": float(np.median(values)),
-        "std": float(np.std(values, ddof=1)) if values.size > 1 else 0.0,
-        "min": float(np.min(values)),
-        "max": float(np.max(values)),
-    }
