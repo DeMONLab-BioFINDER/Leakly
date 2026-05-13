@@ -27,6 +27,12 @@ def validate_data(
 ) -> None:
     """
     Validate feature, target, and optional covariate arrays.
+
+    Args:
+        X (ArrayLike): Feature data.
+        y (ArrayLike): Target data.
+        covariates (ArrayLike | None, optional): 
+            Covariate data. Defaults to None.
     """
     x, _ = check_X_y(
         X,
@@ -63,6 +69,19 @@ def data_split(
 ]:
     """
     Split ``X``, ``y``, and optional ``covariates`` into train/test partitions.
+
+    Args:
+        X (ArrayLike): Feature data.
+        y (ArrayLike): Target data.
+        covariates (ArrayLike | None, optional): 
+            Covariate data. Defaults to None.
+        config (SplitConfig | None, optional): 
+            Split configuration. Defaults to None.
+
+    Returns:
+        tuple[ ArrayLike, ArrayLike, ArrayLike, ArrayLike, 
+        ArrayLike | None, ArrayLike | None, ]: 
+            Split feature and target arrays.
     """
     if isinstance(covariates, SplitConfig) and config is None:
         config = covariates
@@ -91,9 +110,18 @@ def data_split(
     return train_test_split(X, y, covariates, **split_kwargs)
 
 
-def subset_rows(values: ArrayLike | None, indices: ArrayLike) -> ArrayLike | None:
+def subset_rows(values: ArrayLike | None, 
+                indices: ArrayLike) -> ArrayLike | None:
     """
     Select rows from numpy arrays, pandas objects, or simple sequences.
+
+    Args:
+        values (ArrayLike | None): 
+            The array or object from which to select rows.
+        indices (ArrayLike): The indices of the rows to select.
+
+    Returns:
+        ArrayLike | None: The selected rows or None if values is None.
     """
     if values is None:
         return None
@@ -109,6 +137,14 @@ def fit_imputer(
 ) -> Any:
     """
     Fit an sklearn imputer on training features only.
+
+    Args:
+        X_train (ArrayLike): The training feature data.
+        config (DataProcConfig | None, optional): 
+            Configuration for the imputation process. Defaults to None.
+
+    Returns:
+        Any: The fitted imputer.
     """
     config = config or DataProcConfig()
     method = config.imputation_method
@@ -124,9 +160,17 @@ def fit_imputer(
         check_array(X_train, dtype=float, ensure_all_finite="allow-nan"))
 
 
-def transform_imputer(imputer: Any, X: ArrayLike) -> np.ndarray:
+def transform_imputer(imputer: Any, 
+                      X: ArrayLike) -> np.ndarray:
     """
     Apply a fitted sklearn imputer.
+
+    Args:
+        imputer (Any): The fitted imputer.
+        X (ArrayLike): The data to transform.
+
+    Returns:
+        np.ndarray: The transformed data.
     """
     x = check_array(X, dtype=float, ensure_all_finite="allow-nan")
     return x if imputer is None else imputer.transform(x)
@@ -138,6 +182,15 @@ def fit_normalizer(
 ) -> Any:
     """
     Fit an sklearn scaler on training features only.
+
+    Args:
+        X_train (ArrayLike): 
+            The training feature data.
+        config (DataProcConfig | None, optional): 
+            Configuration for the normalization process. Defaults to None.
+
+    Returns:
+        Any: The fitted normalizer.
     """
     config = config or DataProcConfig()
     method = config.normalization_method
@@ -156,9 +209,17 @@ def fit_normalizer(
         check_array(X_train, dtype=float, ensure_all_finite="allow-nan"))
 
 
-def transform_normalizer(normalizer: Any, X: ArrayLike) -> np.ndarray:
+def transform_normalizer(normalizer: Any, 
+                         X: ArrayLike) -> np.ndarray:
     """
     Apply a fitted sklearn scaler.
+
+    Args:
+        normalizer (Any): The fitted normalizer.
+        X (ArrayLike): The data to transform.
+
+    Returns:
+        np.ndarray: The transformed data.
     """
     x = check_array(X, dtype=float, ensure_all_finite="allow-nan")
     return x if normalizer is None else normalizer.transform(x)
