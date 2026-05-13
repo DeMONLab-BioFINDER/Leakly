@@ -34,7 +34,10 @@ from .permutation import permute_label
 from .simulation import SimulatedDataset, simulate_dataset
 from .summary import SummaryPlotter
 
+__version__ = "0.1.0"
+
 __all__ = [
+    "__version__",
     "FeatureSelectionConfig",
     "ImputationConfig",
     "LinearRegressionDAA",

@@ -1,3 +1,136 @@
-# Leakly: Leakage check for machine-learning pipelines
----
+<p align="center">
+  <img src="https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/assets/leakly-logo.svg" alt="Leakly logo" width="520">
+</p>
 
+<p align="center">
+  <a href="https://pypi.org/project/Leakly/"><img alt="PyPI" src="https://img.shields.io/pypi/v/Leakly.svg"></a>
+  <a href="https://github.com/DeMONLab-BioFINDER/Leakly/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/DeMONLab-BioFINDER/Leakly/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://codecov.io/gh/DeMONLab-BioFINDER/Leakly"><img alt="Coverage" src="https://codecov.io/gh/DeMONLab-BioFINDER/Leakly/branch/main/graph/badge.svg"></a>
+  <a href="https://github.com/DeMONLab-BioFINDER/Leakly/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <a href="https://codespaces.new/DeMONLab-BioFINDER/Leakly/tree/main?quickstart=1"><img alt="Open in GitHub Codespaces" src="https://github.com/codespaces/badge.svg"></a>
+</p>
+
+# Leakly
+
+**Leakage checks for any machine-learning pipeline.**
+
+Leakly uses label permutation to test whether a pipeline still performs above
+chance when the target has been randomized. If it does, the pipeline may be
+leaking test-set information through preprocessing, feature selection, tuning, or
+another step.
+
+![Example permutation AUC summary](https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/AUC.png)
+
+## Install
+
+```bash
+pip install Leakly
+```
+
+For the current GitHub checkout:
+
+```bash
+git clone https://github.com/DeMONLab-BioFINDER/Leakly.git
+cd Leakly
+pip install -e .
+```
+
+## Quick Start
+
+### Run Online
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/DeMONLab-BioFINDER/Leakly/tree/main?quickstart=1)
+
+Open `example.ipynb`, run the first install cell, then run the notebook from top
+to bottom.
+
+### Run in Python
+
+```python
+from leakly import (
+    MLPipeline,
+    SimulationConfig,
+    SummaryPlotter,
+    load_example_leakage_config,
+    permute_label,
+    simulate_dataset,
+)
+
+data = simulate_dataset(
+    SimulationConfig(
+        n_samples=200,
+        n_features=1000,
+        n_covariates=3,
+        effect_fraction=0.1,
+        effect_size=0.5,
+        random_state=42,
+    )
+)
+
+config = load_example_leakage_config()
+scores = []
+
+for seed in range(100):
+    permuted_y = permute_label(data.y, random_state=seed)
+    score = (
+        MLPipeline(
+            data.X,
+            permuted_y,
+            covariates=data.covariates,
+            config=config,
+        )
+        .fit()
+        .evaluate()
+    )
+    scores.append(score)
+
+SummaryPlotter(scores, chance_level=0.5).plot("AUC.png")
+```
+
+## Principle
+
+1. Permute labels to remove real signal.
+2. Run the full pipeline exactly as a user would run it.
+3. Compare the score distribution with chance level.
+4. Above-chance permuted performance suggests possible leakage.
+
+Leakly includes example configurations for a leaky pipeline and a non-leaky
+pipeline so users can see the effect immediately.
+
+## FAQ
+
+**Can Leakly check my own pipeline?**
+
+Yes. Any pipeline that takes `X`, `y`, optional covariates, and returns a test
+score can be evaluated with the same permutation idea.
+
+**Why can a leaky pipeline score well on permuted labels?**
+
+Because information from the full dataset can enter preprocessing or feature
+selection before the split, creating artificial test-set performance.
+
+**How many permutations should I run?**
+
+Use 100 for a quick check. Use 1,000 or more for publication-level evidence.
+
+**Why does the Codespaces notebook install with `pip install -e ".[notebook]"`?**
+
+It tests the repository version directly. After PyPI release, users can install
+with `pip install Leakly`.
+
+**The coverage badge is missing or unknown. Why?**
+
+It becomes active after the CI workflow uploads its first coverage report.
+
+## Publish to PyPI
+
+```bash
+pip install ".[dev]"
+python -m build
+python -m twine check dist/*
+python -m twine upload dist/*
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).

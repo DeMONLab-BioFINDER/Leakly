@@ -86,6 +86,13 @@ def feature_selection(
         tuple[list[str], list[int]]: _description_
     """
     method_name, selection_config = _resolve_feature_selection_config(config)
+    if selection_config.selected_feature_names is not None:
+        return _select_configured_feature_names(
+            X,
+            feature_names,
+            selection_config.selected_feature_names,
+        )
+
     if method_name != "LinearRegressionDAA":
         raise ValueError(
             "Unsupported feature selection method: "
@@ -343,6 +350,29 @@ def _resolve_feature_selection_config(
     return config.method, config
 
 
+def _select_configured_feature_names(
+    X: ArrayLike,
+    feature_names: list[str] | None,
+    selected_feature_names: list[str],
+) -> tuple[list[str], list[int]]:
+    """
+    Resolve an explicit user-supplied feature list to feature indices.
+    """
+    _, names = _create_feature_matrix(X, feature_names)
+    name_to_index = {name: index for index, name in enumerate(names)}
+    if len(name_to_index) != len(names):
+        raise ValueError("feature_names must be unique")
+
+    selected_names = list(selected_feature_names)
+    missing = [name for name in selected_names if name not in name_to_index]
+    if missing:
+        raise ValueError(
+            "selected_feature_names contains unknown features: "
+            f"{missing}"
+        )
+    return selected_names, [name_to_index[name] for name in selected_names]
+
+
 def _infer_variable_type(variable_vec: ArrayLike) -> str:
     """
     Infer whether a vector should be treated as continuous or categorical.
@@ -356,7 +386,6 @@ def _infer_variable_type(variable_vec: ArrayLike) -> str:
     variable_series = pd.Series(variable_vec)
     if (
         pd.api.types.is_bool_dtype(variable_series)
-        or pd.api.types.is_categorical_dtype(variable_series)
         or isinstance(variable_series.dtype, pd.CategoricalDtype)
         or pd.api.types.is_object_dtype(variable_series)
     ):

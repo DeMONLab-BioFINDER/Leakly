@@ -108,27 +108,12 @@ class MLPipeline:
         self.config = self._make_config(config)
         self.config.model.problem_type = problem_type
         if isinstance(config, Mapping):
-            pipeline = config.get("pipeline") or NO_LEAKAGE_PIPELINE_STEPS
+            pipeline = config.get("pipeline") or self.config.pipeline
         else:
-            pipeline = NO_LEAKAGE_PIPELINE_STEPS
+            pipeline = self.config.pipeline
         self.pipeline = self._make_pipeline(pipeline)
-
-        self.X_train = None
-        self.X_test = None
-        self.y_train = None
-        self.y_test = None
-        self.covariates_train = None
-        self.covariates_test = None
-
-        self.imputer = None
-        self.normalizer = None
-        self.selected_feature_names = None
-        self.selected_feature_indices = None
-        self.model = None
-
-        self.fitted_steps: list[tuple[str, Any]] = []
-        self.has_split = False
-        self.is_fitted = False
+        self.config.pipeline = list(self.pipeline)
+        self._reset_fit_state()
 
     def fit(self) -> "MLPipeline":
         """
@@ -137,6 +122,7 @@ class MLPipeline:
         Returns:
             MLPipeline: The fitted pipeline.
         """
+        self._reset_fit_state()
         validate_data(self.X, self.y, self.covariates)
         current_X = np.asarray(self.X, dtype=float)
         current_y = np.asarray(self.y).reshape(-1)
@@ -344,7 +330,10 @@ class MLPipeline:
             return config
         if isinstance(config, Mapping):
             values = dict(config)
-            values.pop("pipeline", None)
+            if "split" in values and "data_split" not in values:
+                values["data_split"] = values.pop("split")
+            if "ml" in values and "model" not in values:
+                values["model"] = values.pop("ml")
             return PipelineConfig(**values)
         raise TypeError("config must be a PipelineConfig, mapping, or None")
 
@@ -397,6 +386,24 @@ class MLPipeline:
     def _require_fitted(self) -> None:
         if not self.is_fitted or self.model is None:
             raise RuntimeError("MLPipeline must be fitted before use")
+
+    def _reset_fit_state(self) -> None:
+        self.X_train = None
+        self.X_test = None
+        self.y_train = None
+        self.y_test = None
+        self.covariates_train = None
+        self.covariates_test = None
+
+        self.imputer = None
+        self.normalizer = None
+        self.selected_feature_names = None
+        self.selected_feature_indices = None
+        self.model = None
+
+        self.fitted_steps: list[tuple[str, Any]] = []
+        self.has_split = False
+        self.is_fitted = False
 
 
 def _score_predictions(
