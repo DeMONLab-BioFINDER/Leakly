@@ -32,6 +32,7 @@ Written by Lijun An and DeMON Lab under MIT license:
 https://github.com/DeMONLab-BioFINDER/DeMONLabLicenses/blob/main/LICENSE
 '''
 from __future__ import annotations
+from copy import deepcopy
 from typing import Any
 ArrayLike = Any
 
@@ -74,7 +75,7 @@ def ml_model(
     config = config or ModelConfig()
     model = create_model(config=config, estimator=estimator)
     model.fit(X_train, y_train)
-    return model.evaluate(X_test, y_test, metric=config.metric)
+    return model.evaluate(X_test, y_test, metric=model.config.metric)
 
 
 
@@ -278,7 +279,7 @@ def create_model(
     Returns:
         SklearnModel: A wrapped sklearn model.
     """
-    config = config or ModelConfig()
+    config = _normalize_model_config(config or ModelConfig())
 
     if estimator is not None:
         return SklearnModel(estimator=estimator, config=config)
@@ -293,3 +294,33 @@ def create_model(
         raise ValueError("Provide estimator=... when config.model='custom'")
 
     raise ValueError(f"Unsupported model: {config.model}")
+
+
+def _normalize_model_config(config: ModelConfig) -> ModelConfig:
+    """
+    Return a copied model config with a compatible default metric.
+    """
+    normalized = deepcopy(config)
+    if not isinstance(normalized.problem_type, str):
+        raise ValueError("problem_type must be a string")
+    if not isinstance(normalized.metric, str):
+        raise ValueError("metric must be a string")
+
+    normalized.problem_type = normalized.problem_type.lower()
+    normalized.metric = normalized.metric.lower()
+
+    if normalized.problem_type == "regression" and normalized.metric == "auc":
+        normalized.metric = "r2"
+
+    valid_metrics = {
+        "binary_classification": {"auc", "accuracy"},
+        "regression": {"r2", "mse"},
+    }
+    if normalized.problem_type not in valid_metrics:
+        raise ValueError(f"Unsupported problem_type: {normalized.problem_type}")
+    if normalized.metric not in valid_metrics[normalized.problem_type]:
+        raise ValueError(
+            f"Metric {normalized.metric!r} is not valid for "
+            f"problem_type {normalized.problem_type!r}"
+        )
+    return normalized

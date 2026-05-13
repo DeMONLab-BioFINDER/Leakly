@@ -25,6 +25,7 @@ https://github.com/DeMONLab-BioFINDER/DeMONLabLicenses/blob/main/LICENSE
 '''
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -51,7 +52,7 @@ from .data import (
     validate_data,
 )
 from .feature_selection import feature_selection
-from .models import create_model
+from .models import _normalize_model_config, create_model
 
 
 STEP_NAMES = {
@@ -107,6 +108,7 @@ class MLPipeline:
 
         self.config = self._make_config(config)
         self.config.model.problem_type = problem_type
+        self.config.model = _normalize_model_config(self.config.model)
         if isinstance(config, Mapping):
             pipeline = config.get("pipeline") or self.config.pipeline
         else:
@@ -215,7 +217,9 @@ class MLPipeline:
                 if not self.has_split:
                     raise ValueError("model step must appear after data_split")
                 self.config.model.problem_type = self.problem_type
+                self.config.model = _normalize_model_config(self.config.model)
                 self.model = create_model(self.config.model)
+                self.config.model = self.model.config
                 self.model.fit(self.X_train, self.y_train)
                 self.is_fitted = True
 
@@ -327,9 +331,9 @@ class MLPipeline:
         if config is None:
             return create_default_config()
         if isinstance(config, PipelineConfig):
-            return config
+            return deepcopy(config)
         if isinstance(config, Mapping):
-            values = dict(config)
+            values = deepcopy(dict(config))
             if "split" in values and "data_split" not in values:
                 values["data_split"] = values.pop("split")
             if "ml" in values and "model" not in values:

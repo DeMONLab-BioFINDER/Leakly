@@ -30,6 +30,7 @@ Written by Lijun An and DeMON Lab under MIT license:
 https://github.com/DeMONLab-BioFINDER/DeMONLabLicenses/blob/main/LICENSE
 '''
 import numpy as np
+import pandas as pd
 from typing import Any
 from dataclasses import dataclass
 from .config import SimulationConfig
@@ -109,7 +110,6 @@ def simulate_dataset(
     # 4. Simulate covariates (randomly continuous or binary or categorical)
     # Homogeneously distributed across target classes (no confounding)
     if config.n_covariates:
-        covariates = np.zeros((config.n_samples, config.n_covariates))
         if config.covariate_names is not None:
             if len(config.covariate_names) != config.n_covariates:
                 raise ValueError("covariate_names length must match n_covariates")
@@ -119,17 +119,26 @@ def simulate_dataset(
                 f"covariate_{index + 1}"
                 for index in range(config.n_covariates)
             ]
-        for cov_index, _ in enumerate(covariate_names):
+        covariate_values: dict[str, Any] = {}
+        for covariate_name in covariate_names:
             if rng.random() < 0.5:
                 # continuous covariate
-                cov_values = rng.normal(
+                covariate_values[covariate_name] = rng.normal(
                     loc=0.0, scale=1.0, size=config.n_samples)
-                covariates[:, cov_index] = cov_values
             else:
                 # binary or categorical covariate with 2-4 categories
                 n_categories = rng.integers(2, 5)
-                cov_values = rng.integers(0, n_categories, size=config.n_samples)
-                covariates[:, cov_index] = cov_values
+                category_indices = rng.integers(
+                    0, n_categories, size=config.n_samples)
+                categories = np.array(
+                    [
+                        f"{covariate_name}_level_{index + 1}"
+                        for index in range(n_categories)
+                    ],
+                    dtype=object,
+                )
+                covariate_values[covariate_name] = categories[category_indices]
+        covariates = pd.DataFrame(covariate_values)
     else:
         covariates = None
         covariate_names = None

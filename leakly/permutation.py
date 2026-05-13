@@ -53,7 +53,7 @@ def permute_label(
         raise ValueError("y must be one-dimensional or a one-column array")
     if y_array.ndim > 2:
         raise ValueError("y must be one-dimensional or a one-column array")
-    if y_array.ndim == 2 and 1 not in y_array.shape:
+    if y_array.ndim == 2 and y_array.shape[1] != 1:
         raise ValueError("two-dimensional y must have exactly one column")
 
     flat_y = y_array.reshape(-1)

@@ -5,8 +5,10 @@
 <p align="center">
   <a href="https://pypi.org/project/Leakly/"><img alt="PyPI" src="https://img.shields.io/pypi/v/Leakly.svg"></a>
   <a href="https://github.com/DeMONLab-BioFINDER/Leakly/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/DeMONLab-BioFINDER/Leakly/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://codecov.io/gh/DeMONLab-BioFINDER/Leakly"><img alt="Coverage" src="https://codecov.io/gh/DeMONLab-BioFINDER/Leakly/branch/main/graph/badge.svg"></a>
   <a href="https://github.com/DeMONLab-BioFINDER/Leakly/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+</p>
+
+<p align="center">
   <a href="https://codespaces.new/DeMONLab-BioFINDER/Leakly/tree/main?quickstart=1"><img alt="Open in GitHub Codespaces" src="https://github.com/codespaces/badge.svg"></a>
 </p>
 
@@ -19,7 +21,7 @@ chance when the target has been randomized. If it does, the pipeline may be
 leaking test-set information through preprocessing, feature selection, tuning, or
 another step.
 
-![Example permutation AUC summary](https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/AUC.png)
+![Example permutation AUC summary](https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/auc.png)
 
 ## Install
 
@@ -117,10 +119,6 @@ Use 100 for a quick check. Use 1,000 or more for publication-level evidence.
 
 It tests the repository version directly. After PyPI release, users can install
 with `pip install Leakly`.
-
-**The coverage badge is missing or unknown. Why?**
-
-It becomes active after the CI workflow uploads its first coverage report.
 
 ## Publish to PyPI
 
