@@ -18,7 +18,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
@@ -40,7 +39,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
       - name: Build and check distributions
         run: |
           python -m pip install --upgrade pip

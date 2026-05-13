@@ -421,7 +421,10 @@ def _create_feature_matrix(
     if not np.all(np.isfinite(x)):
         raise ValueError("X contains NaN or infinite values")
 
-    names = list(feature_names or [])
+    if feature_names is None and hasattr(X, "columns"):
+        names = [str(name) for name in X.columns]
+    else:
+        names = list(feature_names or [])
     if not names:
         names = [f"feature_{index + 1}" for index in range(x.shape[1])]
     if len(names) != x.shape[1]:

@@ -66,6 +66,44 @@ def test_ml_pipeline_fit_evaluate_predict_and_refit_idempotence():
     assert 0.0 <= pipeline.evaluate() <= 1.0
 
 
+def test_ml_pipeline_regression_uses_regression_default_metric():
+    X = np.arange(80, dtype=float).reshape(40, 2)
+    y = np.linspace(0.0, 1.0, 40)
+    pipeline = MLPipeline(
+        X,
+        y,
+        problem_type="regression",
+        config=PipelineConfig(
+            data_split=SplitConfig(random_state=4),
+            feature_selection=FeatureSelectionConfig(
+                selected_feature_names=["feature_1", "feature_2"],
+            ),
+            model=ModelConfig(
+                model="random_forest",
+                model_params={"n_estimators": 10},
+            ),
+        ),
+    ).fit()
+
+    assert pipeline.config.model.problem_type == "regression"
+    assert pipeline.config.model.metric == "r2"
+    assert np.isfinite(pipeline.evaluate())
+
+
+def test_ml_pipeline_copies_pipeline_config_before_mutating_model_settings():
+    config = PipelineConfig()
+
+    MLPipeline(
+        np.zeros((4, 2)),
+        np.array([0.0, 1.0, 2.0, 3.0]),
+        problem_type="regression",
+        config=config,
+    )
+
+    assert config.model.problem_type == "binary_classification"
+    assert config.model.metric == "auc"
+
+
 def test_ml_pipeline_evaluates_user_supplied_predictions():
     pipeline = MLPipeline(
         [[0], [1], [2], [3]],

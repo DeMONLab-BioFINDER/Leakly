@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 from leakly import FeatureSelectionConfig, feature_selection
@@ -19,6 +20,25 @@ def test_feature_selection_uses_explicit_selected_feature_names():
 
     assert selected_names == ["gamma", "alpha"]
     assert selected_indices == [2, 0]
+
+
+def test_feature_selection_infers_pandas_dataframe_column_names():
+    X = np.arange(24, dtype=float).reshape(6, 4)
+    frame = pd.DataFrame(
+        X,
+        columns=["alpha", "beta", "gamma", "delta"],
+    )
+
+    selected_names, selected_indices = feature_selection(
+        frame,
+        [0, 1, 0, 1, 0, 1],
+        config=FeatureSelectionConfig(
+            selected_feature_names=["delta", "beta"],
+        ),
+    )
+
+    assert selected_names == ["delta", "beta"]
+    assert selected_indices == [3, 1]
 
 
 def test_feature_selection_rejects_unknown_explicit_feature_name():

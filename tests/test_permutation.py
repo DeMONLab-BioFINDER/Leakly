@@ -56,3 +56,10 @@ def test_permute_label_rejects_invalid_percentage(percentage):
 def test_permute_label_rejects_invalid_label_shape(y):
     with pytest.raises(ValueError):
         permute_label(y)
+
+
+def test_permute_label_rejects_row_vector_dataframe():
+    y = pd.DataFrame([[0, 1, 0]], columns=["a", "b", "c"])
+
+    with pytest.raises(ValueError, match="one column"):
+        permute_label(y)

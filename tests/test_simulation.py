@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 from leakly import SimulationConfig, simulate_dataset
@@ -38,7 +39,7 @@ def test_simulate_dataset_is_reproducible_with_random_state():
 
     np.testing.assert_allclose(first.X, second.X)
     np.testing.assert_array_equal(first.y, second.y)
-    np.testing.assert_allclose(first.covariates, second.covariates)
+    pd.testing.assert_frame_equal(first.covariates, second.covariates)
 
 
 def test_simulate_dataset_accepts_custom_names_and_no_covariates():
@@ -57,6 +58,20 @@ def test_simulate_dataset_accepts_custom_names_and_no_covariates():
     assert data.covariate_names is None
     assert data.feature_names == ["age", "volume", "score"]
     assert data.signal_features == ["age"]
+
+
+def test_simulate_dataset_preserves_categorical_covariate_dtype():
+    data = simulate_dataset(
+        SimulationConfig(
+            n_samples=20,
+            n_features=2,
+            n_covariates=6,
+            random_state=123,
+        )
+    )
+
+    assert isinstance(data.covariates, pd.DataFrame)
+    assert any(dtype == object for dtype in data.covariates.dtypes)
 
 
 @pytest.mark.parametrize(
