@@ -55,27 +55,12 @@ pip install -e .
 ```python
 from leakly import (
     MLPipeline,
-    SimulationConfig,
     SummaryPlotter,
     load_example_leakage_config,
     permute_label,
-    simulate_dataset,
 )
 
-data = simulate_dataset(
-    SimulationConfig(
-        n_samples=200,
-        n_features=1000,
-        n_covariates=3,
-        effect_fraction=0.1,
-        effect_size=0.5,
-        random_state=42,
-    )
-)
-
-config = load_example_leakage_config()
 scores = []
-
 for seed in range(100):
     permuted_y = permute_label(data.y, random_state=seed)
     score = (
@@ -84,7 +69,7 @@ for seed in range(100):
             data.X,
             permuted_y,
             covariates=data.covariates,
-            config=config,
+            config=load_example_leakage_config(),
         ).fit()).evaluate()
     scores.append(score)
 
