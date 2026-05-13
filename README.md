@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/assets/leakly-logo.svg" alt="Leakly logo" width="520">
+  <img src="assets/leakly-logo.svg" alt="Leakly logo" width="520">
 </p>
 
 <p align="center">
@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://codespaces.new/DeMONLab-BioFINDER/Leakly/tree/main?quickstart=1"><img alt="Open in GitHub Codespaces" src="https://github.com/codespaces/badge.svg"></a>
+  <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open in Google Colab" src="https://colab.research.google.com/assets/colab-badge.svg"></a>
 </p>
 
 # Leakly
@@ -17,11 +18,12 @@
 **Leakage checks for any machine-learning pipeline.**
 
 Leakly uses label permutation to test whether a pipeline still performs above
-chance when the target has been randomized. If it does, the pipeline may be
-leaking test-set information through preprocessing, feature selection, tuning, or
-another step.
+chance when no true signal is present.
 
-![Example permutation AUC summary](https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/auc.png)
+If it does, the pipeline may be leaking test-set information
+through preprocessing, feature selection, tuning, or another step.
+
+![Example permutation AUC summary](https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/assets/AUC.png)
 
 ## Install
 
@@ -42,6 +44,7 @@ pip install -e .
 ### Run Online
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/DeMONLab-BioFINDER/Leakly/tree/main?quickstart=1)
+[![Open in Google Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb)
 
 Open `example.ipynb`, run the first install cell, then run the notebook from top
 to bottom.
@@ -75,6 +78,7 @@ scores = []
 for seed in range(100):
     permuted_y = permute_label(data.y, random_state=seed)
     score = (
+        # user could replace with any pipeline
         MLPipeline(
             data.X,
             permuted_y,
@@ -86,7 +90,7 @@ for seed in range(100):
     )
     scores.append(score)
 
-SummaryPlotter(scores, chance_level=0.5).plot("AUC.png")
+SummaryPlotter(scores, chance_level=0.5).plot("assets/AUC.png")
 ```
 
 ## Principle
@@ -109,25 +113,12 @@ score can be evaluated with the same permutation idea.
 **Why can a leaky pipeline score well on permuted labels?**
 
 Because information from the full dataset can enter preprocessing or feature
-selection before the split, creating artificial test-set performance.
+selection before the split, so that the pipeline could "remember" random
+patterns, therefore performing above chance.
 
 **How many permutations should I run?**
 
 Use 100 for a quick check. Use 1,000 or more for publication-level evidence.
-
-**Why does the Codespaces notebook install with `pip install -e ".[notebook]"`?**
-
-It tests the repository version directly. After PyPI release, users can install
-with `pip install Leakly`.
-
-## Publish to PyPI
-
-```bash
-pip install ".[dev]"
-python -m build
-python -m twine check dist/*
-python -m twine upload dist/*
-```
 
 ## License
 

@@ -119,9 +119,13 @@ def simulate_dataset(
                 f"covariate_{index + 1}"
                 for index in range(config.n_covariates)
             ]
+        is_categorical = rng.random(config.n_covariates) >= 0.5
+        if not np.any(is_categorical):
+            is_categorical[-1] = True
+
         covariate_values: dict[str, Any] = {}
-        for covariate_name in covariate_names:
-            if rng.random() < 0.5:
+        for covariate_name, categorical in zip(covariate_names, is_categorical):
+            if not categorical:
                 # continuous covariate
                 covariate_values[covariate_name] = rng.normal(
                     loc=0.0, scale=1.0, size=config.n_samples)
