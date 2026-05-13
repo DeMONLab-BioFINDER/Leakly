@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/Leakly/"><img alt="PyPI" src="https://img.shields.io/pypi/v/Leakly.svg"></a>
-  <a href="https://github.com/DeMONLab-BioFINDER/Leakly/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/DeMONLab-BioFINDER/Leakly/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/DeMONLab-BioFINDER/Leakly/actions/workflows/ci.yml?query=branch%3Amain"><img alt="Build" src="https://github.com/DeMONLab-BioFINDER/Leakly/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/DeMONLab-BioFINDER/Leakly/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
 </p>
 
