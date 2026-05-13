@@ -38,6 +38,12 @@ pipeline so users can see the effect immediately.
 pip install Leakly
 ```
 
+For notebook environments that need the optional notebook dependencies:
+
+```bash
+pip install "Leakly[notebook]"
+```
+
 For the current GitHub checkout:
 
 ```bash
@@ -88,9 +94,7 @@ After label permutation, there should be no real biological, clinical, or statis
 
 A leaky pipeline may still score well if information from the full dataset enters the analysis before the train/test split or outside the cross-validation loop. Common sources include feature selection, scaling, imputation, covariate adjustment, dimensionality reduction, or hyperparameter tuning performed on all samples.
 
-This is especially problematic in high-dimensional data, such as neuroimaging, omics, or biomarker studies, where random label-specific patterns can appear meaningful by chance. If the test set influences preprocessing or feature selection, the model may preserve these random patterns and show inflated performance.
-
-Leakly tests this directly: does the pipeline still perform above chance when labels are meaningless? If yes, it does not pinpoint the exact leakage source, but it strongly indicates that the pipeline needs inspection.
+This is especially problematic in high-dimensional data, such as neuroimaging, omics, or biomarker studies, where random label-specific patterns can appear meaningful by chance. If the test set influences preprocessing or feature selection, the model may "remember" these random patterns and show inflated performance.
 
 **How many permutations should I run?**
 
