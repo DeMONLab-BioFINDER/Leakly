@@ -104,22 +104,17 @@ Yes. Leakly can evaluate any pipeline that takes `X`, `y`, optional `covariates`
 
 **Why can a leaky pipeline score well on permuted labels?**
 
-After labels are permuted, there should be no real biological, clinical, or statistical signal linking the features to the outcome. Therefore, a properly designed pipeline should not be able to predict the permuted labels better than chance.
+After label permutation, there should be no real biological, clinical, or statistical link between features and outcomes. A valid pipeline should therefore perform near chance.
 
-A leaky pipeline may still score well because information from the full dataset has entered the analysis before the train/test split or outside the cross-validation loop. For example, leakage can occur when feature selection, scaling, imputation, covariate adjustment, dimensionality reduction, or hyperparameter tuning is performed using all samples before the data are split. In that situation, the test set has already influenced one or more earlier steps of the pipeline.
+A leaky pipeline may still score well if information from the full dataset enters the analysis before the train/test split or outside the cross-validation loop. Common sources include feature selection, scaling, imputation, covariate adjustment, dimensionality reduction, or hyperparameter tuning performed on all samples.
 
-This is especially dangerous in high-dimensional settings, such as neuroimaging, omics, or biomarker discovery, where there may be many more features than samples. Even after label permutation, random patterns can appear statistically meaningful by chance. If preprocessing or feature selection is allowed to see the full dataset, the pipeline may accidentally select or preserve these random label-specific patterns. The final model can then appear to perform well on the test set, even though the performance is driven by leakage rather than true predictive signal.
+This is especially problematic in high-dimensional data, such as neuroimaging, omics, or biomarker studies, where random label-specific patterns can appear meaningful by chance. If the test set influences preprocessing or feature selection, the model may preserve these random patterns and show inflated performance.
 
-Leakly detects this failure mode by asking a simple question: does the pipeline still perform above chance when the labels are meaningless? If yes, the result does not automatically prove exactly where the leakage occurs, but it provides strong evidence that the pipeline should be inspected.
+Leakly tests this directly: does the pipeline still perform above chance when labels are meaningless? If yes, it does not pinpoint the exact leakage source, but it strongly indicates that the pipeline needs inspection.
 
 **How many permutations should I run?**
 
 Use 100 for a quick check. Use 1,000 or more for publication-level evidence.
-
-**Why are Colab and local results different?**
-
-Run the first notebook cell after pulling the latest code. Exact matching also
-requires the same Leakly and dependency versions.
 
 ## License
 
