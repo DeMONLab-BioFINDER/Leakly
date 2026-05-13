@@ -41,14 +41,14 @@ setup(
     package_data={"leakly": ["*.yaml"]},
     python_requires=">=3.10",
     install_requires=[
-        "joblib>=1.3",
-        "matplotlib>=3.7",
-        "numpy>=1.23",
-        "pandas>=1.5",
-        "PyYAML>=6.0",
-        "scikit-learn>=1.6",
-        "scipy>=1.9",
-        "tqdm>=4.64",
+        "joblib>=1.3,<2.0",
+        "matplotlib>=3.7,<4.0",
+        "numpy>=1.23,<2.4",
+        "pandas>=1.5,<3.0",
+        "PyYAML>=6.0,<7.0",
+        "scikit-learn>=1.6,<1.7",
+        "scipy>=1.9,<1.16",
+        "tqdm>=4.64,<5.0",
     ],
     extras_require={
         "dev": [

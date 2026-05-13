@@ -167,7 +167,7 @@ class SplitConfig:
 
     method: SplitMethod = "train_test"
     test_fraction: float = 0.2
-    random_state: int | None = None
+    random_state: int | None = 42
     stratify: bool = False
 
 
@@ -268,7 +268,7 @@ class SimulationConfig:
     class_balance: float = 0.5
     feature_names: list[str] | None = None
     covariate_names: list[str] | None = None
-    random_state: int | None = None
+    random_state: int | None = 42
 
 
 def create_default_config() -> PipelineConfig:

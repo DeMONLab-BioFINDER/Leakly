@@ -134,14 +134,14 @@ def simulate_dataset(
                 n_categories = rng.integers(2, 5)
                 category_indices = rng.integers(
                     0, n_categories, size=config.n_samples)
-                categories = np.array(
-                    [
-                        f"{covariate_name}_level_{index + 1}"
-                        for index in range(n_categories)
-                    ],
-                    dtype=object,
+                categories = [
+                    f"{covariate_name}_level_{index + 1}"
+                    for index in range(n_categories)
+                ]
+                covariate_values[covariate_name] = pd.Categorical.from_codes(
+                    category_indices,
+                    categories=categories,
                 )
-                covariate_values[covariate_name] = categories[category_indices]
         covariates = pd.DataFrame(covariate_values)
     else:
         covariates = None
