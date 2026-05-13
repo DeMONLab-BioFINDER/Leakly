@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/leakly-logo.svg" alt="Leakly logo" width="520">
+  <img src="https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/assets/leakly-logo.svg" alt="Leakly logo" width="520">
 </p>
 
 <p align="center">
