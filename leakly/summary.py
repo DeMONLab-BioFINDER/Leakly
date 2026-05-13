@@ -9,9 +9,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 import numpy as np
-import matplotlib.pyplot as plt
 from .stats import permutation_test
-        
+
 
 PALETTE = {
     "histogram_teal": "#89BEC6",
@@ -96,6 +95,8 @@ class SummaryPlotter:
         std_score = float(np.std(scores, ddof=1)) if scores.size > 1 else 0.0
         x_min, x_max = _x_axis_limits(mean_score, std_score)
 
+        import matplotlib.pyplot as plt
+
         with plt.rc_context(_publication_rcparams()):
             fig, ax = plt.subplots(figsize=(6.8, 4.4))
             ax.hist(
@@ -154,7 +155,7 @@ class SummaryPlotter:
             if save_path is not None:
                 output_path = Path(save_path)
                 output_path.parent.mkdir(parents=True, exist_ok=True)
-                fig.savefig(output_path, dpi=300, bbox_inches="tight")
+                fig.savefig(output_path, dpi=800, bbox_inches="tight")
         plt.show()
 
     def _score_array(self) -> np.ndarray:

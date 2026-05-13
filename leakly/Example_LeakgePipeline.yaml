@@ -14,7 +14,7 @@ normalization:
 data_split:
   method: train_test
   test_fraction: 0.2
-  random_state: null
+  random_state: 42
   stratify: true
 feature_selection:
   method: LinearRegressionDAA

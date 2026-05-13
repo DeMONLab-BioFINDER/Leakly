@@ -34,6 +34,15 @@ LEAKAGE_PIPELINE_STEPS = [
 EXAMPLE_LEAKAGE_PIPELINE_YAML = "Example_LeakgePipeline.yaml"
 EXAMPLE_NON_LEAKAGE_PIPELINE_YAML = "Example_NonLeakgePipeline.yaml"
 
+ImputationMethod = Literal["knn", "mean", "median", "most_frequent", "none"]
+NormalizationMethod = Literal["zscore", "minmax", "none"]
+FeatureSelectionMethod = Literal["LinearRegressionDAA"]
+CorrectionMethod = Literal["fdr_bh", "bonferroni"]
+SplitMethod = Literal["train_test", "predefined"]
+MLModelName = Literal["random_forest", "svm", "custom"]
+ProblemType = Literal["binary_classification", "regression"]
+EvaluationMetric = Literal["auc", "accuracy", "r2", "mse"]
+
 
 @dataclass(slots=True, kw_only=True)
 class ImputationConfig:
@@ -130,6 +139,13 @@ class FeatureSelectionConfig:
             raise ValueError("minimum_effect_size must be non-negative")
         if self.top_ranks is not None and self.top_ranks < 1:
             raise ValueError("top_ranks must be at least 1")
+        if self.selected_feature_names is not None:
+            if not isinstance(self.selected_feature_names, list) or not all(
+                isinstance(name, str) for name in self.selected_feature_names
+            ):
+                raise ValueError(
+                    "selected_feature_names must be a list of strings or null"
+                )
 
 
 @dataclass(slots=True, kw_only=True)
@@ -187,6 +203,9 @@ class PipelineConfig:
     Default configuration for the ordered ML pipeline.
     """
 
+    pipeline: list[str] = field(
+        default_factory=lambda: list(NO_LEAKAGE_PIPELINE_STEPS)
+    )
     imputation: ImputationConfig = field(default_factory=ImputationConfig)
     normalization: NormalizationConfig = field(
         default_factory=NormalizationConfig)
@@ -198,6 +217,9 @@ class PipelineConfig:
 
     def __post_init__(self) -> None:
         """Coerce nested dictionaries loaded from YAML into config objects."""
+        if isinstance(self.pipeline, str):
+            raise ValueError("pipeline must be a list of step names")
+        self.pipeline = list(self.pipeline)
         nested = {
             "imputation": ImputationConfig,
             "normalization": NormalizationConfig,
@@ -264,8 +286,7 @@ def example_config_dict(
     """
     config = create_default_config()
     values = _make_yaml_safe(asdict(config))
-    values = {
-        "pipeline": pipeline_steps or NO_LEAKAGE_PIPELINE_STEPS, **values}
+    values["pipeline"] = list(pipeline_steps or NO_LEAKAGE_PIPELINE_STEPS)
     return values
 
 
@@ -322,7 +343,6 @@ def load_config_yaml(path: str | Path) -> PipelineConfig:
         values["data_split"] = values.pop("split")
     if "ml" in values and "model" not in values:
         values["model"] = values.pop("ml")
-    values.pop("pipeline", None)
     return PipelineConfig(**values)
 
 
@@ -337,10 +357,8 @@ def print_config(config: Any | None = None) -> None:
     elif isinstance(config, dict):
         values = _make_yaml_safe(config)
     elif hasattr(config, "config") and hasattr(config, "pipeline"):
-        values = {
-            "pipeline": list(config.pipeline),
-            **_make_yaml_safe(asdict(config.config)),
-        }
+        values = _make_yaml_safe(asdict(config.config))
+        values["pipeline"] = list(config.pipeline)
     else:
         raise TypeError(
             "config must be a PipelineConfig, dict, MLPipeline, or None"
