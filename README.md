@@ -50,9 +50,7 @@ pip install -e .
 
 ### <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open example.ipynb in Colab" src="https://img.shields.io/badge/Open-example.ipynb-F9AB00?logo=googlecolab&logoColor=white" height="28"></a>
 
-Run the first install cell, then run the notebook from top to bottom.
-
-### Run in Python
+### Key Python snippet
 
 ```python
 from leakly import (
@@ -87,10 +85,7 @@ for seed in range(100):
             permuted_y,
             covariates=data.covariates,
             config=config,
-        )
-        .fit()
-        .evaluate()
-    )
+        ).fit()).evaluate()
     scores.append(score)
 
 SummaryPlotter(scores, chance_level=0.5).plot("assets/AUC.png")
