@@ -42,6 +42,15 @@ def test_simulate_dataset_is_reproducible_with_random_state():
     pd.testing.assert_frame_equal(first.covariates, second.covariates)
 
 
+def test_simulate_dataset_default_config_is_reproducible():
+    first = simulate_dataset(SimulationConfig())
+    second = simulate_dataset(SimulationConfig())
+
+    np.testing.assert_allclose(first.X, second.X)
+    np.testing.assert_array_equal(first.y, second.y)
+    pd.testing.assert_frame_equal(first.covariates, second.covariates)
+
+
 def test_simulate_dataset_accepts_custom_names_and_no_covariates():
     data = simulate_dataset(
         SimulationConfig(
@@ -71,7 +80,10 @@ def test_simulate_dataset_preserves_categorical_covariate_dtype():
     )
 
     assert isinstance(data.covariates, pd.DataFrame)
-    assert any(dtype == object for dtype in data.covariates.dtypes)
+    categorical_columns = data.covariates.select_dtypes(
+        include=["category"]
+    ).columns
+    assert len(categorical_columns) >= 1
 
 
 @pytest.mark.parametrize(

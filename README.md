@@ -9,8 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://codespaces.new/DeMONLab-BioFINDER/Leakly/tree/main?quickstart=1"><img alt="Open in GitHub Codespaces" src="https://github.com/codespaces/badge.svg"></a>
-  <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open in Google Colab" src="https://colab.research.google.com/assets/colab-badge.svg"></a>
+  <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open in Google Colab" src="https://colab.research.google.com/assets/colab-badge.svg" height="32"></a>
 </p>
 
 # Leakly
@@ -41,13 +40,9 @@ pip install -e .
 
 ## Quick Start
 
-### Run Online
+### <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open example.ipynb in Colab" src="https://img.shields.io/badge/Open-example.ipynb-F9AB00?logo=googlecolab&logoColor=white" height="28"></a>
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/DeMONLab-BioFINDER/Leakly/tree/main?quickstart=1)
-[![Open in Google Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb)
-
-Open `example.ipynb`, run the first install cell, then run the notebook from top
-to bottom.
+Run the first install cell, then run the notebook from top to bottom.
 
 ### Run in Python
 
@@ -119,6 +114,11 @@ patterns, therefore performing above chance.
 **How many permutations should I run?**
 
 Use 100 for a quick check. Use 1,000 or more for publication-level evidence.
+
+**Why are Colab and local results different?**
+
+Run the first notebook cell after pulling the latest code. Exact matching also
+requires the same Leakly and dependency versions.
 
 ## License
 
