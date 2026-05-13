@@ -59,7 +59,6 @@ class SummaryPlotter:
         """
         scores = self._score_array()
         mean_score = float(np.mean(scores))
-        median_score = float(np.median(scores))
         std_score = float(np.std(scores, ddof=1)) if scores.size > 1 else 0.0
         p_value = permutation_test(
             self.chance_level,
@@ -89,8 +88,6 @@ class SummaryPlotter:
                 Defaults to None.
             x_label (str | None, optional):
                 Optional x-axis label. Defaults to the constructor value.
-        Returns:
-            Any: Matplotlib axis containing the plot.
         """
         scores = self._score_array()
         summary_text = self.summarize()
@@ -158,8 +155,7 @@ class SummaryPlotter:
                 output_path = Path(save_path)
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 fig.savefig(output_path, dpi=300, bbox_inches="tight")
-
-        return ax
+        plt.show()
 
     def _score_array(self) -> np.ndarray:
         scores = np.asarray(self.test_scores, dtype=float)
