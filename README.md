@@ -12,11 +12,9 @@
   <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open in Google Colab" src="https://colab.research.google.com/assets/colab-badge.svg" height="32"></a>
 </p>
 
-# Leakly
+# Leakly: Leakage checks for any machine-learning pipeline
 
-**Leakage checks for any machine-learning pipeline.**
-
-Leakly uses label permutation to test whether a pipeline still performs above
+`Leakly` uses label permutation to test whether a pipeline still performs above
 chance when no true signal is present.
 
 If it does, the pipeline may be leaking test-set information
@@ -102,14 +100,17 @@ pipeline so users can see the effect immediately.
 
 **Can Leakly check my own pipeline?**
 
-Yes. Any pipeline that takes `X`, `y`, optional covariates, and returns a test
-score can be evaluated with the same permutation idea.
+Yes. Leakly can evaluate any pipeline that takes `X`, `y`, optional `covariates`, and returns a test score. The key is to run the full pipeline exactly as in the real analysis, including preprocessing, feature selection, tuning, and evaluation.
 
 **Why can a leaky pipeline score well on permuted labels?**
 
-Because information from the full dataset can enter preprocessing or feature
-selection before the split, so that the pipeline could "remember" random
-patterns, therefore performing above chance.
+After labels are permuted, there should be no real biological, clinical, or statistical signal linking the features to the outcome. Therefore, a properly designed pipeline should not be able to predict the permuted labels better than chance.
+
+A leaky pipeline may still score well because information from the full dataset has entered the analysis before the train/test split or outside the cross-validation loop. For example, leakage can occur when feature selection, scaling, imputation, covariate adjustment, dimensionality reduction, or hyperparameter tuning is performed using all samples before the data are split. In that situation, the test set has already influenced one or more earlier steps of the pipeline.
+
+This is especially dangerous in high-dimensional settings, such as neuroimaging, omics, or biomarker discovery, where there may be many more features than samples. Even after label permutation, random patterns can appear statistically meaningful by chance. If preprocessing or feature selection is allowed to see the full dataset, the pipeline may accidentally select or preserve these random label-specific patterns. The final model can then appear to perform well on the test set, even though the performance is driven by leakage rather than true predictive signal.
+
+Leakly detects this failure mode by asking a simple question: does the pipeline still perform above chance when the labels are meaningless? If yes, the result does not automatically prove exactly where the leakage occurs, but it provides strong evidence that the pipeline should be inspected.
 
 **How many permutations should I run?**
 
