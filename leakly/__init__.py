@@ -34,7 +34,7 @@ from .permutation import permute_label
 from .simulation import SimulatedDataset, simulate_dataset
 from .summary import SummaryPlotter
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "__version__",
