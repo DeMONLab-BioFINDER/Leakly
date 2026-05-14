@@ -14,27 +14,18 @@
 
 # Leakly: Leakage checks for any machine-learning pipeline
 
-`Leakly` uses label permutation to test whether a machine-learning pipeline
+`Leakly` uses label permutation to test whether a machine-learning pipeline performs above chance when no true signal is present.
 
-performs above chance when no true signal is present.
-
-Above-chance performance after permutation may indicate leakage from
-
-preprocessing, feature selection, tuning, or another step of the pipeline.
+Above-chance performance after permutation may indicate leakage from preprocessing, feature selection, tuning, or another step of the pipeline.
 
 ## How it works
 
 1. Permute labels to remove the real feature-label association.
-
 2. Run the full pipeline exactly as in the original analysis.
-
 3. Compare the permuted score distribution with chance level.
-
 4. Above-chance permuted performance suggests possible leakage.
 
-`Leakly` includes example configurations for a leaky pipeline and a non-leaky
-
-pipeline so users can inspect the effect directly.
+`Leakly` includes example configurations for a leaky pipeline and a non-leaky pipeline so users can inspect the effect directly.
 
 ![Example permutation AUC summary](https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/assets/AUC.png)
 
@@ -42,20 +33,6 @@ pipeline so users can inspect the effect directly.
 
 ```bash
 pip install Leakly
-```
-
-For notebook environments that need the optional notebook dependencies:
-
-```bash
-pip install "Leakly[notebook]"
-```
-
-For the current GitHub checkout:
-
-```bash
-git clone https://github.com/DeMONLab-BioFINDER/Leakly.git
-cd Leakly
-pip install -e .
 ```
 
 ## Quick Start on Colab: <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open example.ipynb in Colab" src="https://img.shields.io/badge/Open-example.ipynb-F9AB00?logo=googlecolab&logoColor=white" height="28"></a>
