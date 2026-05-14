@@ -14,21 +14,27 @@
 
 # Leakly: Leakage checks for any machine-learning pipeline
 
-`Leakly` uses label permutation to test whether a pipeline still performs above
-chance when no true signal is present.
+`Leakly` uses label permutation to test whether a machine-learning pipeline
 
-If it does, the pipeline may be leaking test-set information
-through preprocessing, feature selection, tuning, or another step.
+performs above chance when no true signal is present.
 
-## Principle
+Above-chance performance after permutation may indicate leakage from
 
-1. Permute labels to remove real signal.
-2. Run the full pipeline exactly as a user would run it.
-3. Compare the score distribution with chance level.
+preprocessing, feature selection, tuning, or another step of the pipeline.
+
+## How it works
+
+1. Permute labels to remove the real feature-label association.
+
+2. Run the full pipeline exactly as in the original analysis.
+
+3. Compare the permuted score distribution with chance level.
+
 4. Above-chance permuted performance suggests possible leakage.
 
-Leakly includes example configurations for a leaky pipeline and a non-leaky
-pipeline so users can see the effect immediately.
+`Leakly` includes example configurations for a leaky pipeline and a non-leaky
+
+pipeline so users can inspect the effect directly.
 
 ![Example permutation AUC summary](https://raw.githubusercontent.com/DeMONLab-BioFINDER/Leakly/main/assets/AUC.png)
 
@@ -52,9 +58,7 @@ cd Leakly
 pip install -e .
 ```
 
-## Quick Start
-
-### <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open example.ipynb in Colab" src="https://img.shields.io/badge/Open-example.ipynb-F9AB00?logo=googlecolab&logoColor=white" height="28"></a>
+## Quick Start on Colab: <a href="https://colab.research.google.com/github/DeMONLab-BioFINDER/Leakly/blob/main/example.ipynb"><img alt="Open example.ipynb in Colab" src="https://img.shields.io/badge/Open-example.ipynb-F9AB00?logo=googlecolab&logoColor=white" height="28"></a>
 
 ### Key Python snippet
 
@@ -63,38 +67,44 @@ from leakly import (
     MLPipeline,
     SummaryPlotter,
     load_example_leakage_config,
-    permute_label,
-)
+    permute_label)
 
 scores = []
 for seed in range(100):
-    permuted_y = permute_label(data.y, random_state=seed)
+    permuted_y = permute_label(y, random_state=seed)
     score = (
-        # user could replace with any pipeline
+        # Replace with any user-defined pipeline
         MLPipeline(
-            data.X,
+            X,
             permuted_y,
-            covariates=data.covariates,
+            covariates=covariates,
             config=load_example_leakage_config(),
-        ).fit()).evaluate()
+        ).fit()
+    ).evaluate()
     scores.append(score)
 
-SummaryPlotter(scores, chance_level=0.5).plot("assets/AUC.png")
+SummaryPlotter(scores, chance_level=0.5).plot()
 ```
 
 ## FAQ
 
-**Can Leakly check my own pipeline?**
+**Can `Leakly` check my own pipeline?**
 
-Yes. Leakly can evaluate any pipeline that takes `X`, `y`, optional `covariates`, and returns a test score. The key is to run the full pipeline exactly as in the real analysis, including preprocessing, feature selection, tuning, and evaluation.
+Yes. `Leakly` can evaluate any pipeline that takes `X`, `y`,
+optional `covariates`, and returns a test score.
+The key is to run the full pipeline exactly as in the real analysis,
+including preprocessing, feature selection, tuning, and evaluation.
 
 **Why can a leaky pipeline score well on permuted labels?**
 
-After label permutation, there should be no real biological, clinical, or statistical link between features and outcomes. A valid pipeline should therefore perform near chance.
+If leakage occurs, information from test samples can enter the analysis before
+the train/test split or outside the cross-validation loop. Common sources
+include feature selection, scaling, imputation, covariate adjustment,
+dimensionality reduction, or hyperparameter tuning performed on all samples.
 
-A leaky pipeline may still score well if information from the full dataset enters the analysis before the train/test split or outside the cross-validation loop. Common sources include feature selection, scaling, imputation, covariate adjustment, dimensionality reduction, or hyperparameter tuning performed on all samples.
-
-This is especially problematic in high-dimensional data, such as neuroimaging, omics, or biomarker studies, where random label-specific patterns can appear meaningful by chance. If the test set influences preprocessing or feature selection, the model may "remember" these random patterns and show inflated performance.
+In high-dimensional data such as omics and neuroimaging, random features can
+appear predictive by chance. If a pipeline can retain these spurious patterns,
+it may perform above chance even after labels are permuted.
 
 **How many permutations should I run?**
 
